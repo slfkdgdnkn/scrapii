@@ -38,7 +38,7 @@ Scrapii/
 ├── nginx.conf          # Configuración de nginx para producción
 ├── docker-build.sh     # Script de automatización para Linux/Mac
 ├── docker-build.bat    # Script de automatización para Windows
-└── README.md           # Documentación del proyecto
+└── README.md           # Documentación del proyecto.
 ```
 
 ## 🎯 Funcionalidades Detalladas
