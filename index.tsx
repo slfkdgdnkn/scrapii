@@ -9,6 +9,30 @@ interface SeoAuditResult {
     text: string;
 }
 
+interface EcommerceData {
+    products: {
+        name: string;
+        price: string | null;
+        currency: string | null;
+        availability: string | null;
+        rating: number | null;
+        reviewCount: number | null;
+    }[];
+    structuredData: {
+        hasProductSchema: boolean;
+        hasOrganizationSchema: boolean;
+        hasReviewSchema: boolean;
+    };
+    paymentMethods: string[];
+    shoppingFeatures: {
+        hasCart: boolean;
+        hasWishlist: boolean;
+        hasSearch: boolean;
+        hasFilters: boolean;
+    };
+    totalProducts: number;
+}
+
 interface ScrapedData {
     title: string;
     meta: {
@@ -32,6 +56,7 @@ interface ScrapedData {
         altTexts: SeoAuditResult;
     };
     technologies: string[];
+    ecommerce: EcommerceData;
 }
 
 interface Query {
@@ -41,7 +66,7 @@ interface Query {
     timestamp: number;
 }
 
-type Tab = 'summary' | 'seo' | 'gallery' | 'tech' | 'json';
+type Tab = 'summary' | 'seo' | 'gallery' | 'tech' | 'ecommerce' | 'json';
 
 // --- COMPONENTE PRINCIPAL ---
 const App = () => {
@@ -76,6 +101,113 @@ const App = () => {
         if (doc.querySelector('meta[name="generator"][content*="Shopify"]')) technologies.add('Shopify');
         if (doc.querySelector('#__next')) technologies.add('Next.js');
         return Array.from(technologies);
+    };
+
+    const analyzeEcommerce = (html: string, doc: Document): EcommerceData => {
+        const products: EcommerceData['products'] = [];
+        const paymentMethods: string[] = [];
+        
+        // Detectar productos por selectores comunes
+        const productSelectors = [
+            '.product', '.item', '[data-product]', '.product-item',
+            '.woocommerce-product', '.shopify-product', '.product-card'
+        ];
+        
+        productSelectors.forEach(selector => {
+            doc.querySelectorAll(selector).forEach(productEl => {
+                const nameEl = productEl.querySelector('.product-title, .product-name, h1, h2, h3, .title, [data-product-title]');
+                const priceEl = productEl.querySelector('.price, .product-price, .cost, [data-price], .amount');
+                const ratingEl = productEl.querySelector('.rating, .stars, [data-rating]');
+                const reviewEl = productEl.querySelector('.reviews, .review-count, [data-reviews]');
+                
+                if (nameEl || priceEl) {
+                    const priceText = priceEl?.textContent?.trim() || null;
+                    const currency = priceText?.match(/[$€£¥₹]/)?.[0] || null;
+                    
+                    products.push({
+                        name: nameEl?.textContent?.trim() || 'Producto sin nombre',
+                        price: priceText,
+                        currency,
+                        availability: productEl.querySelector('.stock, .availability')?.textContent?.trim() || null,
+                        rating: ratingEl ? parseFloat(ratingEl.textContent?.match(/\d+\.?\d*/)?.[0] || '0') || null : null,
+                        reviewCount: reviewEl ? parseInt(reviewEl.textContent?.match(/\d+/)?.[0] || '0') || null : null
+                    });
+                }
+            });
+        });
+        
+        // Detectar métodos de pago
+        const paymentKeywords = {
+            'PayPal': ['paypal', 'pp-logo'],
+            'Stripe': ['stripe', 'stripe-button'],
+            'Visa': ['visa'],
+            'Mastercard': ['mastercard', 'master-card'],
+            'American Express': ['amex', 'american-express'],
+            'Apple Pay': ['apple-pay', 'applepay'],
+            'Google Pay': ['google-pay', 'googlepay'],
+            'Bitcoin': ['bitcoin', 'btc'],
+            'Mercado Pago': ['mercadopago', 'mercado-pago']
+        };
+        
+        Object.entries(paymentKeywords).forEach(([method, keywords]) => {
+            if (keywords.some(keyword => 
+                html.toLowerCase().includes(keyword) || 
+                doc.querySelector(`[class*="${keyword}"], [id*="${keyword}"]`)
+            )) {
+                paymentMethods.push(method);
+            }
+        });
+        
+        // Analizar structured data
+        const jsonLdScripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
+        const structuredData = {
+            hasProductSchema: false,
+            hasOrganizationSchema: false,
+            hasReviewSchema: false
+        };
+        
+        jsonLdScripts.forEach(script => {
+            try {
+                const data = JSON.parse(script.textContent || '');
+                const checkSchema = (obj: any) => {
+                    if (obj['@type']) {
+                        if (obj['@type'].includes('Product')) structuredData.hasProductSchema = true;
+                        if (obj['@type'].includes('Organization')) structuredData.hasOrganizationSchema = true;
+                        if (obj['@type'].includes('Review')) structuredData.hasReviewSchema = true;
+                    }
+                };
+                
+                if (Array.isArray(data)) {
+                    data.forEach(checkSchema);
+                } else {
+                    checkSchema(data);
+                }
+            } catch (e) {
+                // Ignorar errores de parsing JSON
+            }
+        });
+        
+        // Detectar características de shopping
+        const shoppingFeatures = {
+            hasCart: !!(doc.querySelector('.cart, #cart, [data-cart], .shopping-cart, .basket') || 
+                       html.toLowerCase().includes('add to cart') || 
+                       html.toLowerCase().includes('añadir al carrito')),
+            hasWishlist: !!(doc.querySelector('.wishlist, .favorites, [data-wishlist]') || 
+                           html.toLowerCase().includes('wishlist') || 
+                           html.toLowerCase().includes('lista de deseos')),
+            hasSearch: !!(doc.querySelector('input[type="search"], .search-box, #search') || 
+                         html.toLowerCase().includes('buscar producto')),
+            hasFilters: !!(doc.querySelector('.filter, .filters, [data-filter]') || 
+                          html.toLowerCase().includes('filtrar'))
+        };
+        
+        return {
+            products,
+            structuredData,
+            paymentMethods,
+            shoppingFeatures,
+            totalProducts: products.length
+        };
     };
 
     const performSeoAudit = (data: ScrapedData): ScrapedData['seoAudit'] => {
@@ -147,6 +279,7 @@ const App = () => {
                 ...scrapedData,
                 technologies: detectTechnologies(html, doc),
                 seoAudit: performSeoAudit(scrapedData as ScrapedData),
+                ecommerce: analyzeEcommerce(html, doc),
             };
 
             setCurrentResult(fullScrapedData);
@@ -234,6 +367,97 @@ const App = () => {
         </div>
     );
 
+    const renderEcommerce = (data: ScrapedData) => {
+        const { ecommerce } = data;
+        return (
+            <div className="ecommerce-analysis">
+                <div className="ecommerce-section">
+                    <h3>📊 Resumen General</h3>
+                    <ul className="summary-list">
+                        <li className="summary-item">
+                            <span className="summary-value-count">{ecommerce.totalProducts}</span>
+                            <span className="summary-label">Productos detectados</span>
+                        </li>
+                        <li className="summary-item">
+                            <span className="summary-value-count">{ecommerce.paymentMethods.length}</span>
+                            <span className="summary-label">Métodos de pago</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div className="ecommerce-section">
+                    <h3>🛒 Características de Tienda</h3>
+                    <ul className="audit-list">
+                        <li className={`audit-item ${ecommerce.shoppingFeatures.hasCart ? 'audit-pass' : 'audit-fail'}`}>
+                            <span className="audit-icon">{ecommerce.shoppingFeatures.hasCart ? '✓' : '❌'}</span>
+                            <span>Carrito de compras</span>
+                        </li>
+                        <li className={`audit-item ${ecommerce.shoppingFeatures.hasSearch ? 'audit-pass' : 'audit-warn'}`}>
+                            <span className="audit-icon">{ecommerce.shoppingFeatures.hasSearch ? '✓' : '⚠️'}</span>
+                            <span>Búsqueda de productos</span>
+                        </li>
+                        <li className={`audit-item ${ecommerce.shoppingFeatures.hasFilters ? 'audit-pass' : 'audit-warn'}`}>
+                            <span className="audit-icon">{ecommerce.shoppingFeatures.hasFilters ? '✓' : '⚠️'}</span>
+                            <span>Filtros de productos</span>
+                        </li>
+                        <li className={`audit-item ${ecommerce.shoppingFeatures.hasWishlist ? 'audit-pass' : 'audit-warn'}`}>
+                            <span className="audit-icon">{ecommerce.shoppingFeatures.hasWishlist ? '✓' : '⚠️'}</span>
+                            <span>Lista de deseos</span>
+                        </li>
+                    </ul>
+                </div>
+
+                {ecommerce.paymentMethods.length > 0 && (
+                    <div className="ecommerce-section">
+                        <h3>💳 Métodos de Pago</h3>
+                        <div className="tech-list">
+                            {ecommerce.paymentMethods.map(method => <span key={method} className="tech-item">{method}</span>)}
+                        </div>
+                    </div>
+                )}
+
+                <div className="ecommerce-section">
+                    <h3>📋 Structured Data</h3>
+                    <ul className="audit-list">
+                        <li className={`audit-item ${ecommerce.structuredData.hasProductSchema ? 'audit-pass' : 'audit-warn'}`}>
+                            <span className="audit-icon">{ecommerce.structuredData.hasProductSchema ? '✓' : '⚠️'}</span>
+                            <span>Schema de productos</span>
+                        </li>
+                        <li className={`audit-item ${ecommerce.structuredData.hasOrganizationSchema ? 'audit-pass' : 'audit-warn'}`}>
+                            <span className="audit-icon">{ecommerce.structuredData.hasOrganizationSchema ? '✓' : '⚠️'}</span>
+                            <span>Schema de organización</span>
+                        </li>
+                        <li className={`audit-item ${ecommerce.structuredData.hasReviewSchema ? 'audit-pass' : 'audit-warn'}`}>
+                            <span className="audit-icon">{ecommerce.structuredData.hasReviewSchema ? '✓' : '⚠️'}</span>
+                            <span>Schema de reseñas</span>
+                        </li>
+                    </ul>
+                </div>
+
+                {ecommerce.products.length > 0 && (
+                    <div className="ecommerce-section">
+                        <h3>🛍️ Productos Encontrados</h3>
+                        <div className="products-grid">
+                            {ecommerce.products.slice(0, 6).map((product, i) => (
+                                <div key={i} className="product-card">
+                                    <h4>{product.name}</h4>
+                                    {product.price && <p className="product-price">{product.price}</p>}
+                                    {product.rating && (
+                                        <p className="product-rating">⭐ {product.rating} {product.reviewCount && `(${product.reviewCount} reseñas)`}</p>
+                                    )}
+                                    {product.availability && <p className="product-stock">{product.availability}</p>}
+                                </div>
+                            ))}
+                            {ecommerce.products.length > 6 && (
+                                <p className="more-products">... y {ecommerce.products.length - 6} productos más</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const renderTabContent = () => {
         if (loading) return <div className="loading">Extrayendo información...</div>;
         if (error) return <div className="error">{error}</div>;
@@ -244,6 +468,7 @@ const App = () => {
             case 'seo': return renderSeoAudit(currentResult);
             case 'gallery': return renderImageGallery(currentResult);
             case 'tech': return renderTechnologies(currentResult);
+            case 'ecommerce': return renderEcommerce(currentResult);
             case 'json': return <pre><code>{JSON.stringify(currentResult, null, 2)}</code></pre>;
             default: return null;
         }
@@ -297,6 +522,7 @@ const App = () => {
                             <button className={`tab-button ${activeTab === 'seo' ? 'active' : ''}`} onClick={() => setActiveTab('seo')}>Auditoría SEO</button>
                             <button className={`tab-button ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Galería</button>
                             <button className={`tab-button ${activeTab === 'tech' ? 'active' : ''}`} onClick={() => setActiveTab('tech')}>Tecnologías</button>
+                            <button className={`tab-button ${activeTab === 'ecommerce' ? 'active' : ''}`} onClick={() => setActiveTab('ecommerce')}>E-commerce</button>
                             <button className={`tab-button ${activeTab === 'json' ? 'active' : ''}`} onClick={() => setActiveTab('json')}>JSON Crudo</button>
                         </div>
                         <div className="tab-content">

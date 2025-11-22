@@ -280,6 +280,59 @@
             padding: 2px;
         }
 
+        /* E-commerce Styles */
+        .ecommerce-analysis {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+        .ecommerce-section h3 {
+            margin: 0 0 1rem 0;
+            font-size: 1.1rem;
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+        .product-card {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            background-color: #f8f9fa;
+        }
+        .product-card h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+        .product-price {
+            font-weight: bold;
+            color: var(--primary-color);
+            font-size: 1.1rem;
+            margin: 0.25rem 0;
+        }
+        .product-rating {
+            color: #666;
+            font-size: 0.9rem;
+            margin: 0.25rem 0;
+        }
+        .product-stock {
+            color: var(--success-color);
+            font-size: 0.85rem;
+            margin: 0.25rem 0;
+        }
+        .more-products {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            grid-column: 1 / -1;
+            margin-top: 1rem;
+        }
+
         .footer {
             text-align: center;
             padding: 1rem;
