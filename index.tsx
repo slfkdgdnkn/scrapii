@@ -106,29 +106,80 @@ const App = () => {
     const analyzeEcommerce = (html: string, doc: Document): EcommerceData => {
         const products: EcommerceData['products'] = [];
         const paymentMethods: string[] = [];
+        const htmlLower = html.toLowerCase();
         
-        // Detectar productos por selectores comunes
+        // Detectar productos con selectores más amplios
         const productSelectors = [
-            '.product', '.item', '[data-product]', '.product-item',
-            '.woocommerce-product', '.shopify-product', '.product-card'
+            // Selectores generales
+            '.product', '.item', '.product-item', '.product-card', '.product-tile',
+            // E-commerce específicos
+            '.woocommerce-product', '.shopify-product', '.magento-product',
+            // Atributos data
+            '[data-product]', '[data-product-id]', '[data-item]',
+            // Contenedores de artículos
+            'article', '.card', '.listing', '.result',
+            // Grids y listas de productos
+            '.grid-item', '.list-item', '.catalog-item'
         ];
+        
+        // También buscar por patrones de precio para detectar productos
+        const pricePatterns = /\$\d+|€\d+|£\d+|¥\d+|₹\d+|\d+\.\d+\s*\$|\d+,\d+\s*€/g;
+        const priceMatches = html.match(pricePatterns) || [];
         
         productSelectors.forEach(selector => {
             doc.querySelectorAll(selector).forEach(productEl => {
-                const nameEl = productEl.querySelector('.product-title, .product-name, h1, h2, h3, .title, [data-product-title]');
-                const priceEl = productEl.querySelector('.price, .product-price, .cost, [data-price], .amount');
-                const ratingEl = productEl.querySelector('.rating, .stars, [data-rating]');
-                const reviewEl = productEl.querySelector('.reviews, .review-count, [data-reviews]');
+                // Selectores más amplios para nombres
+                const nameSelectors = [
+                    '.product-title', '.product-name', '.title', '.name',
+                    'h1', 'h2', 'h3', 'h4', '.heading',
+                    '[data-product-title]', '[data-name]',
+                    '.item-title', '.card-title'
+                ];
+                
+                // Selectores más amplios para precios
+                const priceSelectors = [
+                    '.price', '.product-price', '.cost', '.amount',
+                    '[data-price]', '.price-current', '.price-now',
+                    '.sale-price', '.regular-price', '.final-price',
+                    '.money', '.currency'
+                ];
+                
+                let nameEl = null;
+                let priceEl = null;
+                
+                // Buscar nombre
+                for (const sel of nameSelectors) {
+                    nameEl = productEl.querySelector(sel);
+                    if (nameEl && nameEl.textContent?.trim()) break;
+                }
+                
+                // Buscar precio
+                for (const sel of priceSelectors) {
+                    priceEl = productEl.querySelector(sel);
+                    if (priceEl && priceEl.textContent?.trim()) break;
+                }
+                
+                // Si no encuentra precio, buscar por patrón de texto
+                if (!priceEl) {
+                    const textContent = productEl.textContent || '';
+                    const priceMatch = textContent.match(/\$\d+|€\d+|£\d+|¥\d+|₹\d+/);
+                    if (priceMatch) {
+                        priceEl = { textContent: priceMatch[0] } as Element;
+                    }
+                }
                 
                 if (nameEl || priceEl) {
                     const priceText = priceEl?.textContent?.trim() || null;
                     const currency = priceText?.match(/[$€£¥₹]/)?.[0] || null;
                     
+                    const ratingEl = productEl.querySelector('.rating, .stars, [data-rating], .review-stars, .star-rating');
+                    const reviewEl = productEl.querySelector('.reviews, .review-count, [data-reviews], .review-total');
+                    
                     products.push({
-                        name: nameEl?.textContent?.trim() || 'Producto sin nombre',
+                        name: nameEl?.textContent?.trim() || 'Producto detectado',
                         price: priceText,
                         currency,
-                        availability: productEl.querySelector('.stock, .availability')?.textContent?.trim() || null,
+                        availability: productEl.querySelector('.stock, .availability, .in-stock, .out-of-stock')?.textContent?.trim() || null,
                         rating: ratingEl ? parseFloat(ratingEl.textContent?.match(/\d+\.?\d*/)?.[0] || '0') || null : null,
                         reviewCount: reviewEl ? parseInt(reviewEl.textContent?.match(/\d+/)?.[0] || '0') || null : null
                     });
@@ -136,23 +187,37 @@ const App = () => {
             });
         });
         
-        // Detectar métodos de pago
+        // Si no encontró productos, buscar por patrones de precio en el HTML
+        if (products.length === 0 && priceMatches.length > 0) {
+            priceMatches.slice(0, 5).forEach((price, i) => {
+                products.push({
+                    name: `Producto ${i + 1}`,
+                    price: price,
+                    currency: price.match(/[$€£¥₹]/)?.[0] || null,
+                    availability: null,
+                    rating: null,
+                    reviewCount: null
+                });
+            });
+        }
+        
+        // Detectar métodos de pago con patrones más amplios
         const paymentKeywords = {
-            'PayPal': ['paypal', 'pp-logo'],
-            'Stripe': ['stripe', 'stripe-button'],
-            'Visa': ['visa'],
-            'Mastercard': ['mastercard', 'master-card'],
-            'American Express': ['amex', 'american-express'],
-            'Apple Pay': ['apple-pay', 'applepay'],
-            'Google Pay': ['google-pay', 'googlepay'],
-            'Bitcoin': ['bitcoin', 'btc'],
-            'Mercado Pago': ['mercadopago', 'mercado-pago']
+            'PayPal': ['paypal', 'pp-logo', 'paypal-button'],
+            'Stripe': ['stripe', 'stripe-button', 'stripe-checkout'],
+            'Visa': ['visa', 'visa-card'],
+            'Mastercard': ['mastercard', 'master-card', 'mc-card'],
+            'American Express': ['amex', 'american-express', 'americanexpress'],
+            'Apple Pay': ['apple-pay', 'applepay', 'apple-payment'],
+            'Google Pay': ['google-pay', 'googlepay', 'gpay'],
+            'Bitcoin': ['bitcoin', 'btc', 'crypto'],
+            'Mercado Pago': ['mercadopago', 'mercado-pago', 'mp-payment']
         };
         
         Object.entries(paymentKeywords).forEach(([method, keywords]) => {
             if (keywords.some(keyword => 
-                html.toLowerCase().includes(keyword) || 
-                doc.querySelector(`[class*="${keyword}"], [id*="${keyword}"]`)
+                htmlLower.includes(keyword) || 
+                doc.querySelector(`[class*="${keyword}"], [id*="${keyword}"], [alt*="${keyword}"]`)
             )) {
                 paymentMethods.push(method);
             }
@@ -171,9 +236,10 @@ const App = () => {
                 const data = JSON.parse(script.textContent || '');
                 const checkSchema = (obj: any) => {
                     if (obj['@type']) {
-                        if (obj['@type'].includes('Product')) structuredData.hasProductSchema = true;
-                        if (obj['@type'].includes('Organization')) structuredData.hasOrganizationSchema = true;
-                        if (obj['@type'].includes('Review')) structuredData.hasReviewSchema = true;
+                        const type = Array.isArray(obj['@type']) ? obj['@type'].join(' ') : obj['@type'];
+                        if (type.includes('Product')) structuredData.hasProductSchema = true;
+                        if (type.includes('Organization')) structuredData.hasOrganizationSchema = true;
+                        if (type.includes('Review')) structuredData.hasReviewSchema = true;
                     }
                 };
                 
@@ -187,18 +253,60 @@ const App = () => {
             }
         });
         
-        // Detectar características de shopping
+        // Detectar características de shopping con patrones más amplios
+        const cartPatterns = [
+            // Selectores CSS
+            '.cart', '#cart', '.shopping-cart', '.basket', '.bag',
+            '.cart-icon', '.cart-button', '.add-to-cart', '.buy-now',
+            '[data-cart]', '.minicart', '.cart-container',
+            // Texto en español e inglés
+            'add to cart', 'añadir al carrito', 'agregar al carrito',
+            'comprar ahora', 'buy now', 'add to bag', 'añadir a la bolsa'
+        ];
+        
+        const wishlistPatterns = [
+            '.wishlist', '.favorites', '.favourite', '.wish-list',
+            '[data-wishlist]', '.save-for-later', '.add-to-wishlist',
+            'wishlist', 'lista de deseos', 'favoritos', 'guardar para después'
+        ];
+        
+        const searchPatterns = [
+            'input[type="search"]', '.search-box', '#search', '.search-input',
+            '.search-form', '[placeholder*="search"]', '[placeholder*="buscar"]',
+            'buscar producto', 'search products', 'find products'
+        ];
+        
+        const filterPatterns = [
+            '.filter', '.filters', '[data-filter]', '.facet', '.facets',
+            '.sort', '.sorting', '.category-filter', '.price-filter',
+            'filtrar', 'filter', 'ordenar', 'sort by'
+        ];
+        
+        const hasCart = cartPatterns.some(pattern => 
+            pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
+            doc.querySelector(pattern) : htmlLower.includes(pattern)
+        );
+        
+        const hasWishlist = wishlistPatterns.some(pattern => 
+            pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
+            doc.querySelector(pattern) : htmlLower.includes(pattern)
+        );
+        
+        const hasSearch = searchPatterns.some(pattern => 
+            pattern.startsWith('input') || pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
+            doc.querySelector(pattern) : htmlLower.includes(pattern)
+        );
+        
+        const hasFilters = filterPatterns.some(pattern => 
+            pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
+            doc.querySelector(pattern) : htmlLower.includes(pattern)
+        );
+        
         const shoppingFeatures = {
-            hasCart: !!(doc.querySelector('.cart, #cart, [data-cart], .shopping-cart, .basket') || 
-                       html.toLowerCase().includes('add to cart') || 
-                       html.toLowerCase().includes('añadir al carrito')),
-            hasWishlist: !!(doc.querySelector('.wishlist, .favorites, [data-wishlist]') || 
-                           html.toLowerCase().includes('wishlist') || 
-                           html.toLowerCase().includes('lista de deseos')),
-            hasSearch: !!(doc.querySelector('input[type="search"], .search-box, #search') || 
-                         html.toLowerCase().includes('buscar producto')),
-            hasFilters: !!(doc.querySelector('.filter, .filters, [data-filter]') || 
-                          html.toLowerCase().includes('filtrar'))
+            hasCart,
+            hasWishlist,
+            hasSearch,
+            hasFilters
         };
         
         return {
@@ -381,6 +489,10 @@ const App = () => {
                         <li className="summary-item">
                             <span className="summary-value-count">{ecommerce.paymentMethods.length}</span>
                             <span className="summary-label">Métodos de pago</span>
+                        </li>
+                        <li className="summary-item">
+                            <span className="summary-value-count">{Object.values(ecommerce.shoppingFeatures).filter(Boolean).length}</span>
+                            <span className="summary-label">Características activas</span>
                         </li>
                     </ul>
                 </div>
