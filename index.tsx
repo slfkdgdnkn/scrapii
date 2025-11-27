@@ -33,8 +33,19 @@ interface EcommerceData {
     totalProducts: number;
 }
 
+interface SubdomainData {
+    url: string;
+    title: string;
+    technologies: { name: string; version?: string; currentVersion?: string }[];
+    linkCount: number;
+    imageCount: number;
+    status: 'success' | 'error' | 'skipped';
+    error?: string;
+}
+
 interface ScrapedData {
     title: string;
+    url: string;
     meta: {
         description: string | null;
         keywords: string | null;
@@ -49,14 +60,9 @@ interface ScrapedData {
     };
     links: { text: string; href: string | null; }[];
     images: { src: string | null; alt: string | null; }[];
-    seoAudit: {
-        title: SeoAuditResult;
-        description: SeoAuditResult;
-        h1: SeoAuditResult;
-        altTexts: SeoAuditResult;
-    };
-    technologies: string[];
+    technologies: { name: string; version?: string; currentVersion?: string }[];
     ecommerce: EcommerceData;
+    subdomains: SubdomainData[];
 }
 
 interface Query {
@@ -66,7 +72,7 @@ interface Query {
     timestamp: number;
 }
 
-type Tab = 'summary' | 'seo' | 'gallery' | 'tech' | 'ecommerce' | 'json';
+type Tab = 'summary' | 'tech' | 'ecommerce' | 'subdomains' | 'gallery' | 'json';
 
 // --- COMPONENTE PRINCIPAL ---
 const App = () => {
@@ -91,16 +97,329 @@ const App = () => {
         localStorage.setItem('scrapedQueries', JSON.stringify(newQueries));
     };
 
-    const detectTechnologies = (html: string, doc: Document): string[] => {
+    const extractBaseDomain = (url: string): string => {
+        try {
+            const urlObj = new URL(url);
+            const hostname = urlObj.hostname;
+            const parts = hostname.split('.');
+            // Para dominios como example.com, sub.example.com, blog.example.com
+            if (parts.length >= 2) {
+                // Si es un subdominio, tomar desde el segundo nivel
+                if (parts.length > 2) {
+                    return parts.slice(-2).join('.');
+                }
+                return hostname;
+            }
+            return hostname;
+        } catch {
+            return '';
+        }
+    };
+
+    const extractSubdomains = (links: { href: string | null }[], baseUrl: string): string[] => {
+        const baseDomain = extractBaseDomain(baseUrl);
+        const subdomains = new Set<string>();
+        const baseUrlObj = new URL(baseUrl);
+        const baseHostname = baseUrlObj.hostname;
+        const baseOrigin = baseUrlObj.origin;
+
+        links.forEach(link => {
+            if (!link.href) return;
+            
+            try {
+                const linkUrl = new URL(link.href, baseUrl);
+                const linkHostname = linkUrl.hostname;
+                
+                // Solo incluir si es un subdominio real del mismo dominio base
+                if (linkHostname !== baseHostname && linkHostname.endsWith('.' + baseDomain)) {
+                    // Verificar que no sea el dominio principal
+                    if (linkUrl.origin !== baseOrigin) {
+                        subdomains.add(linkUrl.origin);
+                    }
+                }
+            } catch {
+                // URLs inválidas, ignorar
+            }
+        });
+
+        return Array.from(subdomains);
+    };
+
+    const scrapeSubdomain = async (subdomainUrl: string): Promise<SubdomainData> => {
+        try {
+            const response = await fetch(`${CORS_PROXY}${encodeURIComponent(subdomainUrl)}`);
+            if (!response.ok) {
+                return {
+                    url: subdomainUrl,
+                    title: 'Error de conexión',
+                    technologies: [],
+                    linkCount: 0,
+                    imageCount: 0,
+                    status: 'error',
+                    error: `HTTP ${response.status}`
+                };
+            }
+
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            const title = doc.querySelector('title')?.textContent || 'Sin título';
+            const technologies = detectTechnologies(html, doc);
+            const links = Array.from(doc.querySelectorAll('a[href]')).length;
+            const images = Array.from(doc.querySelectorAll('img')).length;
+
+            return {
+                url: subdomainUrl,
+                title,
+                technologies,
+                linkCount: links,
+                imageCount: images,
+                status: 'success'
+            };
+        } catch (error) {
+            return {
+                url: subdomainUrl,
+                title: 'Error',
+                technologies: [],
+                linkCount: 0,
+                imageCount: 0,
+                status: 'error',
+                error: error instanceof Error ? error.message : 'Error desconocido'
+            };
+        }
+    };
+
+    const getCurrentVersions = (): Record<string, string> => {
+        return {
+            'React': '18.2.0',
+            'Vue.js': '3.3.0',
+            'Angular': '17.1.0',
+            'Svelte': '4.2.0',
+            'Ember.js': '5.0.0',
+            'Backbone.js': '1.4.1',
+            'jQuery': '3.7.1',
+            'Bootstrap': '5.3.0',
+            'Tailwind CSS': '3.4.0',
+            'Bulma': '0.9.4',
+            'Foundation': '6.8.1',
+            'Semantic UI': '2.5.0',
+            'Next.js': '14.1.0',
+            'Nuxt.js': '3.8.0',
+            'Gatsby': '5.12.0',
+            'Vite': '5.1.0',
+            'Webpack': '5.89.0',
+            'Rollup': '4.9.0',
+            'WordPress': '6.4.0',
+            'Shopify': '2024-01',
+            'Drupal': '10.3.0',
+            'Joomla': '5.0.0',
+            'Magento': '2.4.7',
+            'PHP': '8.3.0',
+            'ASP.NET': '8.0.0',
+            'Django': '4.2.7',
+            'Flask': '3.0.0',
+            'Ruby on Rails': '7.1.0',
+            'Node.js/Express': '21.5.0',
+            'Laravel': '11.0.0',
+            'Spring': '3.2.0',
+            'FastAPI': '0.109.0',
+            'MongoDB': '7.0.0',
+            'Firebase': '10.7.0',
+            'Supabase': '2.37.0',
+            'TypeScript': '5.3.0',
+            'SASS/SCSS': '1.69.0',
+            'LESS': '4.2.0',
+            'PostCSS': '8.4.0',
+            'Chart.js': '4.4.0',
+            'D3.js': '7.8.0'
+        };
+    };
+
+    const detectTechnologyVersion = (html: string, techName: string): string | undefined => {
+        const htmlLower = html.toLowerCase();
+        
+        // Verificar que la tecnología esté realmente presente en el HTML
+        if (!htmlLower.includes(techName.toLowerCase().replace(/[^a-z]/g, ''))) {
+            return undefined;
+        }
+        
+        // Patrones más estrictos para detectar versiones reales
+        const versionPatterns = {
+            'React': [
+                /react[.\-]?\d+\.\d+\.\d+/,
+                /react[-_]\d+\.\d+\.\d+/,
+                /react[.\-]\d+\.\d+/,
+                /react[-_]\d+\.\d+/,
+                /react\.version[.\-]?\d+\.\d+\.\d+/,
+                /react-dom@\d+\.\d+\.\d+/,
+                /react[.\-]version[:\s]*[\'"]?\d+\.\d+\.\d+/,
+                /react[.\-]v\d+\.\d+\.\d+/g
+            ],
+            'jQuery': [
+                /jquery[.\-]?\d+\.\d+\.\d+/,
+                /jquery[.\-]?\d+\.\d+/,
+                /jquery[.\-]v\d+\.\d+\.\d+/,
+                /jquery[.\-]v\d+\.\d+/,
+                /jquery[.\-]version[.\-]?\d+\.\d+\.\d+/g
+            ],
+            'Bootstrap': [
+                /bootstrap[.\-@]?\d+\.\d+\.\d+/,
+                /bootstrap[.\-@]?\d+\.\d+/,
+                /bootstrap[.\-]v\d+\.\d+\.\d+/,
+                /bootstrap[.\-]version[.\-]?\d+\.\d+\.\d+/g
+            ],
+            'Vue.js': [
+                /vue[.\-@]?\d+\.\d+\.\d+/,
+                /vue[.\-@]?\d+\.\d+/,
+                /vue[.\-]v\d+\.\d+\.\d+/,
+                /vue[.\-]version[.\-]?\d+\.\d+\.\d+/g
+            ],
+            'Angular': [
+                /@angular[./]core[.\-@]?\d+\.\d+\.\d+/,
+                /@angular[./]cli[.\-@]?\d+\.\d+\.\d+/,
+                /angular[.\-]v?\d+\.\d+\.\d+/,
+                /ng[.\-]version[:\s]*[\'"]?\d+\.\d+\.\d+/g
+            ],
+            'TypeScript': [
+                /typescript[.\-@]?\d+\.\d+\.\d+/,
+                /typescript[.\-@]?\d+\.\d+/,
+                /ts[.\-@]?\d+\.\d+\.\d+/g
+            ],
+            'Node.js/Express': [
+                /node[.\-]?\d+\.\d+\.\d+/,
+                /nodejs[.\-]?\d+\.\d+\.\d+/,
+                /express[.\-@]?\d+\.\d+\.\d+/g
+            ]
+        };
+
+        // Buscar versión específica para esta tecnología
+        const patterns = versionPatterns[techName as keyof typeof versionPatterns];
+        if (patterns) {
+            for (const pattern of patterns) {
+                const matches = htmlLower.match(pattern);
+                if (matches && matches[0]) {
+                    // Extraer solo los números de versión del match
+                    const versionMatch = matches[0].match(/\d+\.\d+\.\d+|\d+\.\d+/);
+                    if (versionMatch && versionMatch[0]) {
+                        return versionMatch[0];
+                    }
+                }
+                
+                // Para patrones con 'g', buscar todos los matches
+                if (pattern.flags.includes('g')) {
+                    const allMatches = Array.from(htmlLower.matchAll(pattern));
+                    for (const match of allMatches) {
+                        if (match[0]) {
+                            const versionMatch = match[0].match(/\d+\.\d+\.\d+|\d+\.\d+/);
+                            if (versionMatch && versionMatch[0]) {
+                                return versionMatch[0];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Patrones genéricos más estrictos (solo si no hay patrones específicos)
+        if (!patterns) {
+            const cleanTechName = techName.toLowerCase().replace(/[^a-z]/g, '');
+            const genericPattern = new RegExp(`${cleanTechName}[.\-@_\\s]*v?(\\d+\\.\\d+(?:\\.\\d+)?)`, 'g');
+            
+            const allMatches = Array.from(htmlLower.matchAll(genericPattern));
+            for (const match of allMatches) {
+                if (match[1] && match[1].match(/^\d+\.\d+(?:\.\d+)?$/)) {
+                    return match[1];
+                }
+            }
+        }
+
+        return undefined;
+    };
+
+    const detectTechnologies = (html: string, doc: Document): { name: string; version?: string; currentVersion?: string }[] => {
         const technologies = new Set<string>();
-        if (html.includes('react.js') || doc.querySelector('[data-reactroot]')) technologies.add('React');
-        if (html.includes('vue.js') || doc.querySelector('#app[data-v-app]')) technologies.add('Vue.js');
-        if (html.includes('angular.js')) technologies.add('AngularJS');
-        if (doc.querySelector('script[src*="jquery"]')) technologies.add('jQuery');
-        if (doc.querySelector('meta[name="generator"][content*="WordPress"]')) technologies.add('WordPress');
-        if (doc.querySelector('meta[name="generator"][content*="Shopify"]')) technologies.add('Shopify');
-        if (doc.querySelector('#__next')) technologies.add('Next.js');
-        return Array.from(technologies);
+        const htmlLower = html.toLowerCase();
+        const scripts = Array.from(doc.querySelectorAll('script'));
+        const links = Array.from(doc.querySelectorAll('link[href]'));
+        const metaGenerator = doc.querySelector('meta[name="generator"]')?.getAttribute('content') || '';
+        
+        // Frameworks y librerías de JavaScript
+        if (html.includes('react') || doc.querySelector('[data-reactroot], [data-react]') || scripts.some(s => s.src?.includes('react'))) technologies.add('React');
+        if (html.includes('vue') || doc.querySelector('#app[data-v-app]') || scripts.some(s => s.src?.includes('vue'))) technologies.add('Vue.js');
+        if (html.includes('angular') || html.includes('ng-app') || scripts.some(s => s.src?.includes('angular'))) technologies.add('Angular');
+        if (html.includes('svelte') || doc.querySelector('[data-svelte]') || scripts.some(s => s.src?.includes('svelte'))) technologies.add('Svelte');
+        if (html.includes('ember') || scripts.some(s => s.src?.includes('ember'))) technologies.add('Ember.js');
+        if (html.includes('backbone') || scripts.some(s => s.src?.includes('backbone'))) technologies.add('Backbone.js');
+        if (html.includes('jquery')) technologies.add('jQuery');
+        if (html.includes('bootstrap') || doc.querySelector('.container-fluid, .container') || links.some(l => l.getAttribute('href')?.includes('bootstrap'))) technologies.add('Bootstrap');
+        if (html.includes('tailwind') || doc.querySelector('[class*="tw-"]')) technologies.add('Tailwind CSS');
+        if (html.includes('bulma') || doc.querySelector('.is-primary')) technologies.add('Bulma');
+        if (html.includes('foundation') || doc.querySelector('[data-sticky]')) technologies.add('Foundation');
+        if (html.includes('semantic-ui') || doc.querySelector('.ui.segment')) technologies.add('Semantic UI');
+        
+        // Frameworks de JavaScript modernos
+        if (doc.querySelector('#__next') || html.includes('next')) technologies.add('Next.js');
+        if (html.includes('nuxt') || doc.querySelector('[data-n-head]')) technologies.add('Nuxt.js');
+        if (html.includes('gatsby') || doc.querySelector('[data-gatsby]')) technologies.add('Gatsby');
+        if (html.includes('vite') || doc.querySelector('[data-vite-plugin]')) technologies.add('Vite');
+        if (html.includes('webpack') || scripts.some(s => s.src?.includes('webpack'))) technologies.add('Webpack');
+        if (html.includes('rollup') || scripts.some(s => s.src?.includes('rollup'))) technologies.add('Rollup');
+        
+        // CMS y plataformas
+        if (metaGenerator.includes('WordPress') || html.includes('wp-content') || html.includes('wordpress')) technologies.add('WordPress');
+        if (metaGenerator.includes('Shopify') || html.includes('shopify')) technologies.add('Shopify');
+        if (metaGenerator.includes('Drupal') || html.includes('drupal')) technologies.add('Drupal');
+        if (metaGenerator.includes('Joomla') || html.includes('joomla')) technologies.add('Joomla');
+        if (metaGenerator.includes('Magento') || html.includes('magento')) technologies.add('Magento');
+        if (html.includes('docusaurus') || html.includes('dokuwiki')) technologies.add('Docusaurus');
+        if (html.includes('notion') || html.includes('notion.so')) technologies.add('Notion');
+        if (html.includes('wix') || html.includes('wixstatic')) technologies.add('Wix');
+        if (html.includes('squarespace') || html.includes('squarespace.com')) technologies.add('Squarespace');
+        
+        // Lenguajes y frameworks de backend
+        if (html.includes('php') || html.includes('.php') || metaGenerator.includes('php')) technologies.add('PHP');
+        if (html.includes('asp.net') || html.includes('.aspx') || metaGenerator.includes('asp.net')) technologies.add('ASP.NET');
+        if (html.includes('django') || html.includes('csrfmiddlewaretoken')) technologies.add('Django');
+        if (html.includes('flask') || html.includes('flask')) technologies.add('Flask');
+        if (html.includes('rails') || html.includes('ruby on rails') || html.includes('csrf-token')) technologies.add('Ruby on Rails');
+        if (html.includes('express') || html.includes('node.js') || html.includes('nodejs')) technologies.add('Node.js/Express');
+        if (html.includes('laravel') || html.includes('laravel')) technologies.add('Laravel');
+        if (html.includes('spring') || html.includes('spring boot')) technologies.add('Spring');
+        if (html.includes('fastapi') || html.includes('swagger-ui')) technologies.add('FastAPI');
+        
+        // Bases de datos (detectables desde el frontend)
+        if (html.includes('mongodb') || scripts.some(s => s.src?.includes('mongodb'))) technologies.add('MongoDB');
+        if (html.includes('firebase') || html.includes('google-analytics')) technologies.add('Firebase');
+        if (html.includes('supabase') || html.includes('supabase')) technologies.add('Supabase');
+        
+        // Bibliotecas de CSS
+        if (html.includes('animate.css') || html.includes('aos') || links.some(l => l.getAttribute('href')?.includes('animate'))) technologies.add('Animate.css');
+        if (html.includes('swiper') || html.includes('slick')) technologies.add('Slider/Carousel');
+        if (html.includes('chart.js') || scripts.some(s => s.src?.includes('chart'))) technologies.add('Chart.js');
+        if (html.includes('d3') || scripts.some(s => s.src?.includes('d3'))) technologies.add('D3.js');
+        
+        // Herramientas de análisis y marketing
+        if (html.includes('google-analytics') || html.includes('gtag')) technologies.add('Google Analytics');
+        if (html.includes('facebook') || html.includes('fb-')) technologies.add('Facebook Pixel');
+        if (html.includes('hubspot') || html.includes('hs-')) technologies.add('HubSpot');
+        if (html.includes('mailchimp') || html.includes('mc-')) technologies.add('Mailchimp');
+        if (html.includes('stripe') || html.includes('stripe')) technologies.add('Stripe');
+        if (html.includes('paypal') || html.includes('paypal')) technologies.add('PayPal');
+        
+        // Herramientas de desarrollo y build
+        if (html.includes('types') || scripts.some(s => s.src?.includes('types'))) technologies.add('TypeScript');
+        if (html.includes('sass') || html.includes('scss') || links.some(l => l.getAttribute('href')?.includes('sass') || l.getAttribute('href')?.includes('scss'))) technologies.add('SASS/SCSS');
+        if (html.includes('less') || links.some(l => l.getAttribute('href')?.includes('less'))) technologies.add('LESS');
+        if (html.includes('postcss') || links.some(l => l.getAttribute('href')?.includes('postcss'))) technologies.add('PostCSS');
+        
+        const currentVersions = getCurrentVersions();
+        
+        return Array.from(technologies)
+            .sort()
+            .map(techName => ({
+                name: techName,
+                version: detectTechnologyVersion(html, techName),
+                currentVersion: currentVersions[techName]
+            }));
     };
 
     const analyzeEcommerce = (html: string, doc: Document): EcommerceData => {
@@ -318,34 +637,7 @@ const App = () => {
         };
     };
 
-    const performSeoAudit = (data: ScrapedData): ScrapedData['seoAudit'] => {
-        const audit: ScrapedData['seoAudit'] = {
-            title: { status: 'fail', text: 'No se encontró título.' },
-            description: { status: 'fail', text: 'No se encontró meta descripción.' },
-            h1: { status: 'fail', text: 'No se encontró ningún encabezado H1.' },
-            altTexts: { status: 'pass', text: 'Todas las imágenes tienen texto alternativo.' },
-        };
 
-        if (data.title) {
-            if (data.title.length < 10) audit.title = { status: 'warn', text: `El título es muy corto (${data.title.length} caracteres).` };
-            else if (data.title.length > 60) audit.title = { status: 'warn', text: `El título es muy largo (${data.title.length} caracteres).` };
-            else audit.title = { status: 'pass', text: 'El título tiene una longitud óptima.' };
-        }
-
-        if (data.meta.description) {
-            if (data.meta.description.length < 50) audit.description = { status: 'warn', text: `La descripción es muy corta (${data.meta.description.length} caracteres).` };
-            else if (data.meta.description.length > 160) audit.description = { status: 'warn', text: `La descripción es muy larga (${data.meta.description.length} caracteres).` };
-            else audit.description = { status: 'pass', text: 'La descripción tiene una longitud óptima.' };
-        }
-
-        if (data.headings.h1.length === 1) audit.h1 = { status: 'pass', text: 'Se encontró un único encabezado H1.' };
-        else if (data.headings.h1.length > 1) audit.h1 = { status: 'warn', text: `Se encontraron ${data.headings.h1.length} encabezados H1. Se recomienda solo uno.` };
-        
-        const imagesWithoutAlt = data.images.filter(img => !img.alt).length;
-        if (imagesWithoutAlt > 0) audit.altTexts = { status: 'warn', text: `${imagesWithoutAlt} de ${data.images.length} imágenes no tienen texto alternativo.` };
-
-        return audit;
-    };
 
     const handleScrape = async () => {
         if (!url.startsWith('http')) {
@@ -358,6 +650,7 @@ const App = () => {
         setActiveTab('summary');
 
         try {
+            // Hacer scraping de la página principal
             const response = await fetch(`${CORS_PROXY}${encodeURIComponent(url)}`);
             if (!response.ok) throw new Error(`Error al obtener la URL. Estado: ${response.status}`);
             
@@ -365,8 +658,40 @@ const App = () => {
             const doc = new DOMParser().parseFromString(html, 'text/html');
             const title = doc.querySelector('title')?.textContent || 'Sin título';
 
-            const scrapedData: Omit<ScrapedData, 'seoAudit' | 'technologies'> = {
+            // Extraer enlaces de la página principal
+            const links = Array.from(doc.querySelectorAll('a[href]')).map(a => ({ 
+                text: a.textContent?.trim() || '', 
+                href: a.getAttribute('href') 
+            }));
+            
+            // Extraer subdominios únicos
+            const subdomains = extractSubdomains(links, url);
+            
+            // Hacer scraping de subdominios (máximo 10 para evitar sobrecarga)
+            const subdomainResults: SubdomainData[] = [];
+            const maxSubdomains = Math.min(subdomains.length, 10);
+            
+            for (let i = 0; i < maxSubdomains; i++) {
+                const subdomainUrl = subdomains[i];
+                try {
+                    const result = await scrapeSubdomain(subdomainUrl);
+                    subdomainResults.push(result);
+                } catch (err) {
+                    subdomainResults.push({
+                        url: subdomainUrl,
+                        title: 'Error',
+                        technologies: [],
+                        linkCount: 0,
+                        imageCount: 0,
+                        status: 'error',
+                        error: err instanceof Error ? err.message : 'Error desconocido'
+                    });
+                }
+            }
+
+            const scrapedData = {
                 title,
+                url,
                 meta: {
                     description: doc.querySelector('meta[name="description"]')?.getAttribute('content') || null,
                     keywords: doc.querySelector('meta[name="keywords"]')?.getAttribute('content') || null,
@@ -379,19 +704,15 @@ const App = () => {
                     h2: Array.from(doc.querySelectorAll('h2')).map(h => h.textContent?.trim()),
                     h3: Array.from(doc.querySelectorAll('h3')).map(h => h.textContent?.trim()),
                 },
-                links: Array.from(doc.querySelectorAll('a[href]')).map(a => ({ text: a.textContent?.trim() || '', href: a.getAttribute('href') })),
+                links: links,
                 images: Array.from(doc.querySelectorAll('img')).map(img => ({ src: img.getAttribute('src'), alt: img.getAttribute('alt') })),
-            };
-            
-            const fullScrapedData: ScrapedData = {
-                ...scrapedData,
                 technologies: detectTechnologies(html, doc),
-                seoAudit: performSeoAudit(scrapedData as ScrapedData),
                 ecommerce: analyzeEcommerce(html, doc),
+                subdomains: subdomainResults,
             };
 
-            setCurrentResult(fullScrapedData);
-            const newQuery: Query = { title, url, data: fullScrapedData, timestamp: Date.now() };
+            setCurrentResult(scrapedData);
+            const newQuery: Query = { title, url, data: scrapedData, timestamp: Date.now() };
             const updatedQueries = [newQuery, ...queries.filter(q => q.url !== url)].slice(0, 10);
             saveQueries(updatedQueries);
 
@@ -442,20 +763,88 @@ const App = () => {
         </ul>
     );
 
-    const renderSeoAudit = (data: ScrapedData) => {
-        const AuditItem = ({ result }: { result: SeoAuditResult }) => (
-            <li className={`audit-item audit-${result.status}`}>
-                <span className="audit-icon">{result.status === 'pass' ? '✓' : result.status === 'warn' ? '⚠️' : '❌'}</span>
-                <span>{result.text}</span>
-            </li>
-        );
+    const getErrorExplanation = (error: string): string => {
+        const errorLower = error.toLowerCase();
+        
+        // Códigos HTTP comunes
+        if (errorLower.includes('404')) {
+            return 'Error 404 - Recurso no encontrado. La URL no existe o ha sido movida.';
+        }
+        if (errorLower.includes('403')) {
+            return 'Error 403 - Acceso prohibido. El servidor deniega el acceso a la página.';
+        }
+        if (errorLower.includes('500')) {
+            return 'Error 500 - Error interno del servidor. Problemas en el servidor web.';
+        }
+        if (errorLower.includes('502')) {
+            return 'Error 502 - Puerta de enlace inválida. Problema de conectividad.';
+        }
+        if (errorLower.includes('503')) {
+            return 'Error 503 - Servicio no disponible. El servidor está temporalmente sobrecargado.';
+        }
+        if (errorLower.includes('timeout')) {
+            return 'Timeout - La conexión tardó demasiado tiempo. El servidor puede estar sobrecargado.';
+        }
+        if (errorLower.includes('refused')) {
+            return 'Conexión rechazada - El servidor está rechazando las conexiones.';
+        }
+        if (errorLower.includes('network')) {
+            return 'Error de red - Problemas de conectividad o DNS.';
+        }
+        if (errorLower.includes('cors')) {
+            return 'Error CORS - El servidor bloquea las peticiones desde este origen.';
+        }
+        if (errorLower.includes('ssl') || errorLower.includes('certificate')) {
+            return 'Error SSL - Problemas con el certificado de seguridad.';
+        }
+        if (errorLower.includes('http')) {
+            const match = errorLower.match(/http (\d+)/);
+            if (match) {
+                const code = match[1];
+                const httpCodes: Record<string, string> = {
+                    '400': 'Error 400 - Petición malformada',
+                    '401': 'Error 401 - No autorizado',
+                    '405': 'Error 405 - Método no permitido',
+                    '408': 'Error 408 - Timeout de petición',
+                    '429': 'Error 429 - Demasiadas peticiones',
+                    '502': 'Error 502 - Puerta de enlace inválida',
+                    '503': 'Error 503 - Servicio no disponible',
+                    '504': 'Error 504 - Timeout de puerta de enlace'
+                };
+                return httpCodes[code] || `Error HTTP ${code} - Código de estado HTTP no estándar`;
+            }
+        }
+        
+        return `Error no identificado: ${error}`;
+    };
+
+    const renderSubdomains = (data: ScrapedData) => {
+        const successSubdomains = data.subdomains.filter(s => s.status === 'success');
+
         return (
-            <ul className="audit-list">
-                <AuditItem result={data.seoAudit.title} />
-                <AuditItem result={data.seoAudit.description} />
-                <AuditItem result={data.seoAudit.h1} />
-                <AuditItem result={data.seoAudit.altTexts} />
-            </ul>
+            <div className="subdomains-analysis">
+                {/* Solo subdominios exitosos con URL completa */}
+                {successSubdomains.length > 0 && (
+                    <div className="subdomains-section">
+                        <h3>🌐 Subdominios Encontrados</h3>
+                        <div className="subdomains-compact">
+                            {successSubdomains.map((subdomain, i) => (
+                                <div 
+                                    key={`success-${i}`} 
+                                    className="subdomain-compact-item success"
+                                >
+                                    <span className="subdomain-title">{subdomain.url}</span>
+                                    <span className="subdomain-status-text">✓ Accesible</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                
+                {successSubdomains.length === 0 && (
+                    <div className="placeholder">No se encontraron subdominios accesibles.</div>
+                )}
+            </div>
         );
     };
 
@@ -469,9 +858,50 @@ const App = () => {
         </div>
     );
 
+    const compareVersions = (version: string, currentVersion: string): 'outdated' | 'current' | 'newer' => {
+        if (!version || !currentVersion) return 'current';
+        
+        const versionParts = version.split('.').map(Number);
+        const currentParts = currentVersion.split('.').map(Number);
+        
+        // Comparar versión mayor, menor y patch
+        for (let i = 0; i < Math.max(versionParts.length, currentParts.length); i++) {
+            const v = versionParts[i] || 0;
+            const c = currentParts[i] || 0;
+            
+            if (v < c) return 'outdated';
+            if (v > c) return 'newer';
+        }
+        
+        return 'current';
+    };
+
     const renderTechnologies = (data: ScrapedData) => (
         <div className="tech-list">
-            {data.technologies.length > 0 ? data.technologies.map(tech => <span key={tech} className="tech-item">{tech}</span>) : <p>No se detectaron tecnologías específicas.</p>}
+            {data.technologies.length > 0 ? data.technologies.map((tech, i) => {
+                const versionStatus = tech.version && tech.currentVersion ? compareVersions(tech.version, tech.currentVersion) : 'current';
+                
+                return (
+                    <div key={i} className={`tech-item-with-version ${versionStatus}`}>
+                        <span className="tech-name">{tech.name}</span>
+                        {tech.version && (
+                            <span className="tech-version">v{tech.version}</span>
+                        )}
+                        {tech.currentVersion && (
+                            <span className="tech-current">actual: {tech.currentVersion}</span>
+                        )}
+                        {versionStatus === 'outdated' && (
+                            <span className="tech-warning">⚠️ Obsoleta</span>
+                        )}
+                        {versionStatus === 'newer' && (
+                            <span className="tech-beta">🆕 Beta</span>
+                        )}
+                        {versionStatus === 'current' && (
+                            <span className="tech-updated">✅ Actual</span>
+                        )}
+                    </div>
+                );
+            }) : <p>No se detectaron tecnologías específicas.</p>}
         </div>
     );
 
@@ -577,10 +1007,10 @@ const App = () => {
         
         switch (activeTab) {
             case 'summary': return renderSummary(currentResult);
-            case 'seo': return renderSeoAudit(currentResult);
             case 'gallery': return renderImageGallery(currentResult);
             case 'tech': return renderTechnologies(currentResult);
             case 'ecommerce': return renderEcommerce(currentResult);
+            case 'subdomains': return renderSubdomains(currentResult);
             case 'json': return <pre><code>{JSON.stringify(currentResult, null, 2)}</code></pre>;
             default: return null;
         }
@@ -595,12 +1025,12 @@ const App = () => {
                     <h1 className="app-title">
                         Scrapii &gt;{' '}
                         <a
-                            href="https://github.com/loiz1/loiz1"
+                            href="https://github.com/loiz1/scrapii"
                             target="_blank"
                             rel="noopener noreferrer"
-                            aria-label="Repositorio GitHub de loiz1"
+                            aria-label="Repositorio GitHub del proyecto"
                             className="github-link"
-                            title="Ver en GitHub"
+                            title="Scrapii en GitHub"
                         >
                       🦊
                         </a>
@@ -631,10 +1061,10 @@ const App = () => {
                     <section className="result-container" aria-live="polite">
                         <div className="tabs">
                             <button className={`tab-button ${activeTab === 'summary' ? 'active' : ''}`} onClick={() => setActiveTab('summary')}>Resumen</button>
-                            <button className={`tab-button ${activeTab === 'seo' ? 'active' : ''}`} onClick={() => setActiveTab('seo')}>Auditoría SEO</button>
-                            <button className={`tab-button ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Galería</button>
                             <button className={`tab-button ${activeTab === 'tech' ? 'active' : ''}`} onClick={() => setActiveTab('tech')}>Tecnologías</button>
                             <button className={`tab-button ${activeTab === 'ecommerce' ? 'active' : ''}`} onClick={() => setActiveTab('ecommerce')}>E-commerce</button>
+                            <button className={`tab-button ${activeTab === 'subdomains' ? 'active' : ''}`} onClick={() => setActiveTab('subdomains')}>Subdominios</button>
+                            <button className={`tab-button ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Galería</button>
                             <button className={`tab-button ${activeTab === 'json' ? 'active' : ''}`} onClick={() => setActiveTab('json')}>JSON Crudo</button>
                         </div>
                         <div className="tab-content">
