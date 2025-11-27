@@ -194,53 +194,14 @@ docker build -t loizzz/web-scrapi:latest .
 docker tag loizzz/web-scrapi:latest loizzz/web-scrapi:v1.0.0
 
 # 3. Push a Docker Hub
-docker push loizzz/webs-crapi:latest
-docker push loizzz/webs-crapi:v1.0.0
+docker push loizzz/web-scrapi:latest
+docker push loizzz/web-scrapi:v1.0.0
 
 # 4. Deployment en producción
-docker run -d -p 80:80 --name webscrapi loiz1/webscrapi:latest
+docker run -d -p 80:80 --name web-scrapi loizzz/web-scrapi:latest
 ```
 
-### **Configuración de Nginx (Producción)**
 
-```nginx
-events { worker_connections 1024; }
-
-http {
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    
-    sendfile on;
-    keepalive_timeout 65;
-    
-    server {
-        listen 80;
-        server_name localhost;
-        
-        # Archivos estáticos
-        location / {
-            root /app/dist;
-            index index.html;
-            try_files $uri $uri/ /index.html;
-        }
-        
-        # Headers CORS
-        add_header 'Access-Control-Allow-Origin' '*' always;
-        add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS' always;
-        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range' always;
-    }
-}
-```
-
-### **Variables de Entorno**
-
-```typescript
-// vite.config.ts
-define: {
-  'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-  'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-}
-```
 
 ---
 

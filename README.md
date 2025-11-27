@@ -88,9 +88,9 @@ Identifica automáticamente tecnologías utilizadas:
 ```bash
 # Descargar y ejecutar directamente desde Docker Hub
 
-docker pull loizzz/web-scrapii:latest
+docker pull loizzz/web-scrapi:latest
 
-docker run -d -p 80:80 --name web-scrapii loizzz/web-scrapii:latest
+docker run -d -p 80:80 --name web-scrapi loizzz/web-scrapi:latest
 ```
 **Acceder a la aplicación:**
 - Abre tu navegador y ve a: http://localhost
