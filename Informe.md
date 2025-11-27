@@ -188,14 +188,14 @@ CMD ["nginx", "-g", "daemon off;"]
 ##### **Proceso de Deployment**
 ```bash
 # 1. Build de imagen
-docker build -t loiz1/webscrapi:latest .
+docker build -t loizzz/web-scrapi:latest .
 
 # 2. Tag con versión
-docker tag loiz1/webscrapi:latest loiz1/webscrapi:v1.0.0
+docker tag loizzz/web-scrapi:latest loizzz/web-scrapi:v1.0.0
 
 # 3. Push a Docker Hub
-docker push loiz1/webscrapi:latest
-docker push loiz1/webscrapi:v1.0.0
+docker push loizzz/webs-crapi:latest
+docker push loizzz/webs-crapi:v1.0.0
 
 # 4. Deployment en producción
 docker run -d -p 80:80 --name webscrapi loiz1/webscrapi:latest
@@ -255,7 +255,7 @@ define: {
 #### **1. Proxy CORS No Confiable (CRÍTICO)**
 - **Riesgo**: **ALTO**
 - **Descripción**: Uso de `corsproxy.io` sin verificación de seguridad
-- **Código Afectado**: 
+- **Código Afectado**:
 ```typescript
 const CORS_PROXY = 'https://corsproxy.io/?';
 const response = await fetch(`${CORS_PROXY}${encodeURIComponent(url)}`);
