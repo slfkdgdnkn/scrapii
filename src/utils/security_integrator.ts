@@ -98,26 +98,26 @@ export class RealisticSecurityCalculator {
     siteType: string = 'DEFAULT',
     context?: SiteContext
   ): SecurityScore {
-    
+
     // 1. Score base según tipo de sitio
     const baseline = this.SITE_BASELINES[siteType as keyof typeof this.SITE_BASELINES] || this.SITE_BASELINES.DEFAULT;
-    
+
     // 2. Evaluar headers con ponderación inteligente
     const headersScore = this.evaluateHeadersRealistically(headers, context);
-    
+
     // 3. Evaluar vulnerabilidades con penalizaciones justas
     const vulnScore = this.evaluateVulnerabilitiesRealistically(vulnerabilities);
-    
+
     // 4. Calcular bonificaciones contextuales
     const bonusScore = this.calculateContextualBonus(headers, vulnerabilities, context);
-    
+
     // 5. Score total con límites realistas
     const total = Math.max(0, Math.min(100, baseline + headersScore.score + vulnScore + bonusScore));
-    
+
     // 6. Determinar letra y nivel de riesgo
     const grade = this.calculateGrade(total);
     const riskLevel = this.calculateRiskLevel(total, vulnerabilities);
-    
+
     return {
       overall: Math.round(total),
       grade,
@@ -147,7 +147,7 @@ export class RealisticSecurityCalculator {
 
     for (const [headerName, config] of Object.entries(this.HEADER_WEIGHTS)) {
       const headerValue = headers[headerName] || headers[headerName.toLowerCase()];
-      
+
       if (headerValue) {
         // Header presente - evaluar calidad
         const quality = this.evaluateHeaderQuality(headerName, headerValue);
@@ -189,16 +189,16 @@ export class RealisticSecurityCalculator {
     const goodPractices = ['default-src', 'script-src', 'style-src'];
     const hasNonces = cspValue.includes('nonce-') || cspValue.includes('sha256-');
     const hasUnsafeInline = cspValue.includes("'unsafe-inline'");
-    
+
     let score = 0.5; // Base score
-    
+
     goodPractices.forEach(directive => {
       if (cspValue.includes(directive)) score += 0.2;
     });
-    
+
     if (!hasUnsafeInline) score += 0.3;
     if (hasNonces) score += 0.2;
-    
+
     return Math.min(1.0, score);
   }
 
@@ -209,13 +209,13 @@ export class RealisticSecurityCalculator {
     const hasMaxAge = hstsValue.includes('max-age=');
     const hasIncludeSubDomains = hstsValue.includes('includeSubDomains');
     const hasPreload = hstsValue.includes('preload');
-    
+
     let score = 0.3;
-    
+
     if (hasMaxAge) score += 0.3;
     if (hasIncludeSubDomains) score += 0.2;
     if (hasPreload) score += 0.2;
-    
+
     return Math.min(1.0, score);
   }
 
@@ -224,7 +224,7 @@ export class RealisticSecurityCalculator {
    */
   private calculateMissingHeaderPenalty(headerName: string, criticality: string, context?: SiteContext): number {
     let penalty = 1.0; // Base penalty
-    
+
     // Reducir penalización para headers menos críticos en ciertos contextos
     const contextModifiers = {
       'static-site': {
@@ -244,24 +244,24 @@ export class RealisticSecurityCalculator {
         'referrer-policy': 1.1
       }
     };
-    
+
     if (context) {
       let modifiers = contextModifiers['static-site'];
-      
+
       if (context.type === 'api' || context.type === 'enterprise') {
         modifiers = { ...modifiers, ...contextModifiers['api-only'] };
       }
-      
+
       if (context.type === 'blog' || context.type === 'portfolio') {
         modifiers = { ...modifiers, ...contextModifiers['blog-portfolio'] };
       }
-      
+
       const modifier = modifiers[headerName as keyof typeof modifiers];
       if (modifier !== undefined) {
         penalty *= modifier;
       }
     }
-    
+
     return penalty;
   }
 
@@ -270,24 +270,24 @@ export class RealisticSecurityCalculator {
    */
   private evaluateVulnerabilitiesRealistically(vulns: VulnerabilityData): number {
     let totalPenalty = 0;
-    
+
     // Penalización proporcional pero justa
     if (vulns.critical > 0) {
       totalPenalty += this.VULNERABILITY_PENALTIES.CRITICAL * Math.min(vulns.critical, 3);
     }
-    
+
     if (vulns.high > 0) {
       totalPenalty += this.VULNERABILITY_PENALTIES.HIGH * Math.min(vulns.high, 5);
     }
-    
+
     if (vulns.medium > 0) {
       totalPenalty += this.VULNERABILITY_PENALTIES.MEDIUM * Math.min(vulns.medium, 8);
     }
-    
+
     if (vulns.low > 0) {
       totalPenalty += this.VULNERABILITY_PENALTIES.LOW * Math.min(vulns.low, 10);
     }
-    
+
     return -Math.round(Math.min(totalPenalty, 30)); // Límite máximo de penalización
   }
 
@@ -296,12 +296,12 @@ export class RealisticSecurityCalculator {
    */
   private calculateContextualBonus(headers: SecurityHeaders, vulnerabilities: VulnerabilityData, context?: SiteContext): number {
     let bonus = 0;
-    
+
     // Bonificación por HTTPS enforcement
     if (headers['strict-transport-security']?.includes('max-age')) {
       bonus += 5;
     }
-    
+
     // Bonificación por baja cantidad de vulnerabilidades
     const totalVulns = vulnerabilities.critical + vulnerabilities.high + vulnerabilities.medium + vulnerabilities.low;
     if (totalVulns === 0) {
@@ -309,18 +309,18 @@ export class RealisticSecurityCalculator {
     } else if (totalVulns <= 2) {
       bonus += 1;
     }
-    
+
     // Bonificación por sitio simple si no tiene contenido de riesgo
     if (context) {
       if ((context.type === 'blog' || context.type === 'portfolio') && !context.hasUserGeneratedContent) {
         bonus += 2;
       }
-      
+
       if (!context.handlesFinancialData && !context.hasLoginSystem && !context.allowsFileUploads) {
         bonus += 3; // Sitio de bajo riesgo
       }
     }
-    
+
     return bonus;
   }
 
@@ -347,7 +347,7 @@ export class RealisticSecurityCalculator {
   private calculateRiskLevel(score: number, vulnerabilities: VulnerabilityData): string {
     const hasCriticalVulns = vulnerabilities.critical > 0;
     const hasHighVulns = vulnerabilities.high > 0;
-    
+
     if (score >= 85 && !hasCriticalVulns && vulnerabilities.high <= 1) return 'Bajo';
     if (score >= 70 && !hasCriticalVulns) return 'Medio';
     if (score >= 50 || vulnerabilities.high > 2) return 'Alto';
@@ -362,19 +362,19 @@ export class RealisticSecurityCalculator {
     if (data.ecommerce && data.ecommerce.totalProducts > 0) {
       return data.ecommerce.totalProducts > 50 ? 'ecommerce-premium' : 'ecommerce-standard';
     }
-    
+
     if (data.technologies.includes('React') || data.technologies.includes('Vue.js')) {
       return 'saas-platform';
     }
-    
+
     if (data.usersDetected.hasUsers && data.usersDetected.accessPoints.length > 3) {
       return 'enterprise-corporate';
     }
-    
+
     if (data.title && (data.title.includes('blog') || data.title.includes('portfolio'))) {
       return 'portfolio-professional';
     }
-    
+
     return 'enterprise-smb';
   }
 
@@ -407,7 +407,7 @@ export class RealisticSecurityCalculator {
       'portfolio-professional': 'portfolio',
       'blog-influencer': 'blog'
     };
-    
+
     return mapping[siteType] || 'enterprise';
   }
 }
@@ -418,86 +418,101 @@ export class RealisticSecurityCalculator {
 export const SecurityIntegrationUtils = {
   /**
    * Filtra vulnerabilidades eliminando falsos positivos
+   * Versión mejorada con análisis contextual avanzado basado en el ejemplo de Rebrandly
    */
   filterFalsePositives(vulnerabilities: any[]): any[] {
     return vulnerabilities.filter(vuln => {
-      // IGNORAR COMPLETAMENTE APIs de Google y servicios legítimos
-      const isGoogleSafe = 
-        vuln.vulnerability.toLowerCase().includes('google') ||
-        vuln.vulnerability.toLowerCase().includes('gtm') ||
-        vuln.vulnerability.toLowerCase().includes('tag manager') ||
-        vuln.vulnerability.toLowerCase().includes('maps api') ||
-        vuln.vulnerability.toLowerCase().includes('analytics') ||
-        vuln.vulnerability.toLowerCase().includes('firebase') ||
-        vuln.vulnerability.toLowerCase().includes('gapi');
-      
-      // IGNORAR configuraciones de desarrollo que son seguras
-      const isDevSafe = 
-        vuln.vulnerability.toLowerCase().includes('console.log') ||
-        vuln.vulnerability.toLowerCase().includes('debug mode') ||
-        vuln.vulnerability.toLowerCase().includes('development');
-      
-      // IGNORAR innerHTML con contenido hardcodeado seguro
-      const isSafeInnerHTML = 
-        vuln.vulnerability.toLowerCase().includes('innerhtml') && (
-          vuln.vulnerability.toLowerCase().includes('hardcoded') ||
-          vuln.vulnerability.toLowerCase().includes('safe') ||
-          vuln.vulnerability.toLowerCase().includes('sanitized')
+      const vulnText = vuln.vulnerability.toLowerCase();
+      const contextText = (vuln.context || '').toLowerCase();
+
+      // 1. IGNORAR document.write() de servicios legítimos de terceros
+      if (vulnText.includes('document.write')) {
+        const vendorScripts = [
+          'googletagmanager', 'gtm', 'tag manager',
+          'intercom', 'widget.intercom.io',
+          'google', 'maps.googleapis.com',
+          'clarity.ms', 'analytics',
+          'pendo', 'zapier', 'stripe'
+        ];
+
+        const isVendorScript = vendorScripts.some(vendor =>
+          contextText.includes(vendor) || vulnText.includes(vendor)
         );
-      
+
+        if (isVendorScript) {
+          return false; // Filtrar (es falso positivo)
+        }
+      }
+
+      // 2. IGNORAR console.warn/log de librerías externas
+      if (vulnText.includes('console.')) {
+        const vendorConsole = [
+          'google maps javascript api',
+          'only loads once',
+          'already loaded',
+          'library',
+          'vendor',
+          'third-party'
+        ];
+
+        const isVendorConsole = vendorConsole.some(pattern =>
+          contextText.includes(pattern) || vulnText.includes(pattern)
+        );
+
+        if (isVendorConsole) {
+          return false; // Filtrar (es falso positivo)
+        }
+      }
+
+      // 3. IGNORAR JSON.parse con try-catch (ya protegido)
+      if (vulnText.includes('json.parse')) {
+        const hasTryCatch = contextText.includes('try') && contextText.includes('catch');
+        const hasErrorHandling = contextText.includes('catch (e)') || contextText.includes('catch(e)');
+
+        if (hasTryCatch || hasErrorHandling) {
+          return false; // Filtrar (ya está protegido)
+        }
+      }
+
+      // 4. IGNORAR RegExp.exec() en código de parsing legítimo
+      if (vulnText.includes('regexp') || vulnText.includes('.exec(')) {
+        const isParsingCode =
+          contextText.includes('getparametername') ||
+          contextText.includes('getparameter') ||
+          contextText.includes('parse') ||
+          contextText.includes('extract') ||
+          contextText.includes('match');
+
+        if (isParsingCode) {
+          return false; // Filtrar (uso legítimo de regex)
+        }
+      }
+
+      // 5. IGNORAR APIs de Google y servicios legítimos
+      const isGoogleSafe =
+        vulnText.includes('google') ||
+        vulnText.includes('gtm') ||
+        vulnText.includes('tag manager') ||
+        vulnText.includes('maps api') ||
+        vulnText.includes('analytics') ||
+        vulnText.includes('firebase') ||
+        vulnText.includes('gapi');
+
+      // 6. IGNORAR configuraciones de desarrollo seguras
+      const isDevSafe =
+        vulnText.includes('debug mode') ||
+        vulnText.includes('development');
+
+      // 7. IGNORAR innerHTML con contenido hardcodeado seguro
+      const isSafeInnerHTML =
+        vulnText.includes('innerhtml') && (
+          vulnText.includes('hardcoded') ||
+          vulnText.includes('safe') ||
+          vulnText.includes('sanitized')
+        );
+
       return !isGoogleSafe && !isDevSafe && !isSafeInnerHTML;
     });
-  },
-
-  /**
-   * Convierte headers del análisis a formato estándar
-   */
-  normalizeHeaders(securityHeaders: any): SecurityHeaders {
-    const normalized: SecurityHeaders = {};
-    
-    if (securityHeaders.detailed?.csp?.present) {
-      normalized['content-security-policy'] = securityHeaders.detailed.csp.content;
-    }
-    if (securityHeaders.detailed?.hsts?.present) {
-      normalized['strict-transport-security'] = securityHeaders.detailed.hsts.content;
-    }
-    if (securityHeaders.detailed?.frameOptions?.present) {
-      normalized['x-frame-options'] = securityHeaders.detailed.frameOptions.content;
-    }
-    if (securityHeaders.contentType) {
-      normalized['x-content-type-options'] = 'nosniff';
-    }
-    if (securityHeaders.detailed?.referrerPolicy?.present) {
-      normalized['referrer-policy'] = securityHeaders.detailed.referrerPolicy.content;
-    }
-    
-    return normalized;
-  },
-
-  /**
-   * Convierte vulnerabilidades al formato estándar
-   */
-  normalizeVulnerabilities(vulnerabilities: any[]): VulnerabilityData {
-    const normalized = { critical: 0, high: 0, medium: 0, low: 0 };
-    
-    vulnerabilities.forEach(vuln => {
-      switch (vuln.severity) {
-        case 'critical':
-          normalized.critical++;
-          break;
-        case 'high':
-          normalized.high++;
-          break;
-        case 'medium':
-          normalized.medium++;
-          break;
-        case 'low':
-          normalized.low++;
-          break;
-      }
-    });
-    
-    return normalized;
   }
 };
 

@@ -100,6 +100,44 @@ export class EnhancedSecurityScanner {
       confidence: 0.90
     },
     {
+      id: 'DOCUMENT_WRITE',
+      name: 'Unsafe document.write',
+      severity: 'HIGH',
+      category: 'XSS',
+      patterns: [
+        /document\.write\s*\(/gi,
+      ],
+      contexts: ['statement'],
+      exclusions: [],
+      confidence: 0.80
+    },
+    {
+      id: 'CONSOLE_LOG',
+      name: 'Information Disclosure via Console',
+      severity: 'MEDIUM',
+      category: 'INFO_LEAK',
+      patterns: [
+        /console\.(log|warn|error|info|debug)\s*\(/gi,
+      ],
+      contexts: ['statement'],
+      exclusions: [
+        /\/\//, // Comments
+      ],
+      confidence: 0.60
+    },
+    {
+      id: 'UNSAFE_JSON_PARSE',
+      name: 'Unsafe JSON.parse',
+      severity: 'LOW',
+      category: 'INJECTION',
+      patterns: [
+        /JSON\.parse\s*\(/gi,
+      ],
+      contexts: ['expression'],
+      exclusions: [],
+      confidence: 0.50
+    },
+    {
       id: 'EVAL_DANGEROUS',
       name: 'Code Injection Risk',
       severity: 'HIGH',
@@ -128,41 +166,66 @@ export class EnhancedSecurityScanner {
   private isSafeInnerHTML(context: string, line: string): boolean {
     // Analizar si el innerHTML es realmente seguro
     const trimmedLine = line.trim();
-    
+
     // Patrones de innerHTML seguros
     const safePatterns = [
       /innerHTML\s*=\s*["'][^"']*["']\s*;?$/,
       /innerHTML\s*=\s*`<[^>]*>`\s*;?$/,
       /innerHTML\s*=\s*`[^`]*`\s*;?$/,
     ];
-    
+
     const hasUserInput = /(\$|\{|\w+\s*\+|window\.|document\.)/i.test(trimmedLine);
-    
+
     if (!hasUserInput && safePatterns.some(pattern => pattern.test(trimmedLine))) {
       return true;
     }
-    
+
     // Verificar comentarios que indiquen uso seguro
     const lines = context.split('\n');
     for (const ctxLine of lines) {
-      if (ctxLine.includes('safe') || ctxLine.includes('sanitized') || 
-          ctxLine.includes('trusted') || ctxLine.includes('hardcoded')) {
+      if (ctxLine.includes('safe') || ctxLine.includes('sanitized') ||
+        ctxLine.includes('trusted') || ctxLine.includes('hardcoded')) {
         return true;
       }
     }
-    
+
     return false;
+  }
+
+  private isSafeDocumentWrite(context: string): boolean {
+    const safeIndicators = [
+      'googletagmanager',
+      'gtm.start',
+      'intercom',
+      'widget.intercom.io',
+      'google',
+      'maps.googleapis.com',
+      'clarity.ms'
+    ];
+    return safeIndicators.some(indicator => context.toLowerCase().includes(indicator));
+  }
+
+  private isSafeConsoleLog(context: string): boolean {
+    // Ignore if it looks like the Google Maps warning or other vendor scripts
+    if (context.includes('Google Maps JavaScript API') || context.includes('only loads once')) {
+      return true;
+    }
+    return false;
+  }
+
+  private isSafeJsonParse(context: string): boolean {
+    return context.includes('try') && context.includes('catch');
   }
 
   private calculateConfidence(vuln: FoundVulnerability, context: string): number {
     let confidence = 0.5; // Base confidence
-    
+
     // Aumentar confianza para patrones muy específicos
     if (vuln.name === 'Hardcoded API Key') {
       confidence = 0.95; // Alta confianza para patrones reales de API keys
     }
-    
-    if (vuln.name === 'DOM XSS via innerHTML') {
+
+    if (vuln.id === 'XSS_INNERHTML') {
       if (this.isSafeInnerHTML(context, vuln.snippet)) {
         vuln.isFalsePositive = true;
         vuln.reason = 'Safe innerHTML usage (hardcoded content or sanitized data)';
@@ -171,7 +234,37 @@ export class EnhancedSecurityScanner {
         confidence = 0.80; // Buena confianza para patrones peligrosos
       }
     }
-    
+
+    if (vuln.id === 'DOCUMENT_WRITE') {
+      if (this.isSafeDocumentWrite(context)) {
+        vuln.isFalsePositive = true;
+        vuln.reason = 'Vendor script or safe usage detected';
+        confidence = 0.1;
+      } else {
+        confidence = 0.85;
+      }
+    }
+
+    if (vuln.id === 'CONSOLE_LOG') {
+      if (this.isSafeConsoleLog(context)) {
+        vuln.isFalsePositive = true;
+        vuln.reason = 'Debug log or vendor script warning';
+        confidence = 0.1;
+      } else {
+        confidence = 0.60;
+      }
+    }
+
+    if (vuln.id === 'UNSAFE_JSON_PARSE') {
+      if (this.isSafeJsonParse(context)) {
+        vuln.isFalsePositive = true;
+        vuln.reason = 'Wrapped in try-catch block';
+        confidence = 0.1;
+      } else {
+        confidence = 0.70;
+      }
+    }
+
     return confidence;
   }
 
@@ -191,7 +284,7 @@ export class EnhancedSecurityScanner {
 
         while ((match = regex.exec(line)) !== null) {
           const matchedText = match[0];
-          
+
           // Verificar exclusiones
           const isExcluded = pattern.exclusions.some(excl => excl.test(matchedText) || excl.test(line));
           if (isExcluded) continue;
@@ -210,7 +303,7 @@ export class EnhancedSecurityScanner {
 
           // Calcular confianza real
           vuln.confidence = this.calculateConfidence(vuln, context);
-          
+
           // Solo reportar si la confianza es suficientemente alta
           if (!vuln.isFalsePositive && vuln.confidence >= 0.75) {
             results.push(vuln);
@@ -222,9 +315,9 @@ export class EnhancedSecurityScanner {
     return results;
   }
 
-  public scanProject(projectPath: string): { 
-    files: number; 
-    vulnerabilities: FoundVulnerability[]; 
+  public scanProject(projectPath: string): {
+    files: number;
+    vulnerabilities: FoundVulnerability[];
     falsePositives: number;
     summary: Record<string, number>;
   } {
@@ -235,7 +328,7 @@ export class EnhancedSecurityScanner {
     for (const file of files) {
       const vulns = this.scanFile(file);
       allVulnerabilities.push(...vulns);
-      
+
       for (const vuln of vulns) {
         if (vuln.isFalsePositive) falsePositives++;
       }
@@ -260,13 +353,13 @@ export class EnhancedSecurityScanner {
   private getProjectFiles(projectPath: string): string[] {
     const files: string[] = [];
     const extensions = ['.ts', '.tsx', '.js', '.jsx', '.html', '.vue'];
-    
+
     const scanDir = (dir: string) => {
       const items = fs.readdirSync(dir);
       for (const item of items) {
         const fullPath = path.join(dir, item);
         const stat = fs.statSync(fullPath);
-        
+
         if (stat.isDirectory() && !item.startsWith('.') && item !== 'node_modules') {
           scanDir(fullPath);
         } else if (stat.isFile() && extensions.includes(path.extname(item))) {
@@ -281,7 +374,7 @@ export class EnhancedSecurityScanner {
 
   public generateReport(results: { files: number; vulnerabilities: FoundVulnerability[]; falsePositives: number; summary: Record<string, number> }): string {
     const { files, vulnerabilities, falsePositives, summary } = results;
-    
+
     let report = `# 🔍 Informe de Seguridad Mejorado\n`;
     report += `## Fecha: ${new Date().toISOString().split('T')[0]}\n`;
     report += `## Archivos analizados: ${files}\n`;
@@ -293,13 +386,13 @@ export class EnhancedSecurityScanner {
     }
 
     report += `## 🚨 VULNERABILIDADES DETECTADAS (Alta Confianza)\n\n`;
-    
+
     for (const [severity, count] of Object.entries(summary)) {
       report += `- **${severity}**: ${count} vulnerabilidades\n`;
     }
 
     report += `\n---\n\n`;
-    
+
     // Agrupar por severidad
     const bySeverity: Record<string, FoundVulnerability[]> = {};
     for (const vuln of vulnerabilities) {
@@ -315,7 +408,7 @@ export class EnhancedSecurityScanner {
       if (!vulns || vulns.length === 0) continue;
 
       report += `### ${severity} (${vulns.length} casos)\n\n`;
-      
+
       for (const vuln of vulns) {
         report += `#### ${vuln.name}\n`;
         report += `- **Línea**: ${vuln.line}\n`;

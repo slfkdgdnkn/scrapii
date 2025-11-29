@@ -1,188 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import { logger } from './src/utils/logger';
-import { sanitizeUserInput, validateScrapingUrl, performSecurityAnalysis } from './src/utils/security';
-import { realisticSecurityCalculator, SecurityIntegrationUtils } from './src/utils/security_integrator';
+import { logger } from './utils/logger';
+import { sanitizeUserInput, validateScrapingUrl, performSecurityAnalysis } from './utils/security';
+import { realisticSecurityCalculator, SecurityIntegrationUtils } from './utils/security_integrator';
+import {
+    SeoAuditResult,
+    EcommerceData,
+    SubdomainData,
+    ScrapingPolicy,
+    SecurityHeaders,
+    SSLAnalysis,
+    VulnerableTechnology,
+    SecurityAnalysis,
+    ScrapedData,
+    OptimizedQuery,
+    Query,
+    Tab
+} from './types';
 
 const CORS_PROXY = 'https://corsproxy.io/?';
 
-// --- TIPOS DE DATOS ---
-interface SeoAuditResult {
-    status: 'pass' | 'warn' | 'fail';
-    text: string;
-}
-
-interface EcommerceData {
-    products: {
-        name: string;
-        price: string | null;
-        currency: string | null;
-        availability: string | null;
-        rating: number | null;
-        reviewCount: number | null;
-    }[];
-    structuredData: {
-        hasProductSchema: boolean;
-        hasOrganizationSchema: boolean;
-        hasReviewSchema: boolean;
-    };
-    paymentMethods: string[];
-    shoppingFeatures: {
-        hasCart: boolean;
-        hasWishlist: boolean;
-        hasSearch: boolean;
-        hasFilters: boolean;
-    };
-    totalProducts: number;
-}
-
-interface SubdomainData {
-    url: string;
-    title: string;
-    technologies: { name: string; version?: string; currentVersion?: string }[];
-    linkCount: number;
-    imageCount: number;
-    status: 'success' | 'error' | 'skipped';
-    error?: string;
-}
-
-// NUEVAS INTERFACES PARA CIBERSEGURIDAD
-interface ScrapingPolicy {
-    robotsTxtAllowed: boolean;
-    termsOfServiceRestricted: boolean;
-    rateLimitDetected: boolean;
-    scrapingProhibited: boolean;
-    userAgentRequired: boolean;
-    delayRequired: number;
-    robotsTxtChecked: boolean;
-    termsChecked: boolean;
-}
-
-interface SecurityHeaders {
-    csp: boolean;
-    hsts: boolean;
-    xss: boolean;
-    contentType: boolean;
-    detailed?: {
-        csp: {
-            present: boolean;
-            valid: boolean;
-            content: string;
-        };
-        hsts: {
-            present: boolean;
-            valid: boolean;
-            content: string;
-            maxAge: number;
-        };
-        xssProtection: {
-            present: boolean;
-            valid: boolean;
-            content: string;
-        };
-        referrerPolicy: {
-            present: boolean;
-            valid: boolean;
-            content: string;
-        };
-        frameOptions: {
-            present: boolean;
-            valid: boolean;
-            content: string;
-        };
-        infoDisclosure: {
-            serverExposed: boolean;
-            poweredByExposed: boolean;
-        };
-    };
-}
-
-interface SSLAnalysis {
-    hasSSL: boolean;
-    validCertificate: boolean;
-    tlsVersion: string;
-    httpsEnabled: boolean;
-    additionalInfo?: {
-        certificateIssuer?: string;
-        certificateSubject?: string;
-        certificateValidity?: {
-            validFrom?: string;
-            validTo?: string;
-            daysRemaining?: number;
-        };
-        protocolVersion?: string;
-        cipherSuite?: string;
-        mixedContent?: boolean;
-    };
-}
-
-interface VulnerableTechnology {
-    name: string;
-    version: string;
-    vulnerability: string;
-    severity: 'low' | 'medium' | 'high' | 'critical';
-    lineNumbers?: number[];
-    recommendation?: string;
-}
-
-interface SecurityAnalysis {
-    securityHeaders: SecurityHeaders;
-    sslAnalysis: SSLAnalysis;
-    vulnerableTechnologies: VulnerableTechnology[];
-    privacyScore: number;
-    externalLinks: number;
-    imagesWithoutAlt: number;
-    cookiesDetected: number;
-}
-
-interface ScrapedData {
-    title: string;
-    url: string;
-    meta: {
-        description: string | null;
-        keywords: string | null;
-        author: string | null;
-        ogTitle: string | null;
-        ogDescription: string | null;
-    };
-    headings: {
-        h1: (string | undefined | null)[];
-        h2: (string | undefined | null)[];
-        h3: (string | undefined | null)[];
-    };
-    links: { text: string; href: string | null; }[];
-    images: { src: string | null; alt: string | null; }[];
-    technologies: { name: string; version?: string; currentVersion?: string }[];
-    ecommerce: EcommerceData;
-    subdomains: SubdomainData[];
-    scrapingPolicy: ScrapingPolicy;
-    securityAnalysis: SecurityAnalysis;
-    robotsTxtContent: string;
-    usersDetected: {
-        hasUsers: boolean;
-        accessPoints: string[];
-    };
-}
-
-interface OptimizedQuery {
-    title: string;
-    url: string;
-    keywords: string[];
-    securityScore: number;
-    matchPercentage: number; // Porcentaje de coincidencia de keywords con contenido web
-    timestamp: number;
-}
-
-interface Query {
-    title: string;
-    url: string;
-    data: ScrapedData;
-    timestamp: number;
-}
-
-type Tab = 'summary' | 'security' | 'tech' | 'ecommerce' | 'subdomains' | 'gallery' | 'json';
-
-// --- COMPONENTE PRINCIPAL ---
 const App = () => {
     const [url, setUrl] = useState('');
     const [queries, setQueries] = useState<Query[]>([]);
@@ -195,7 +31,7 @@ const App = () => {
 
     useEffect(() => {
         let isMounted = true;
-        
+
         const loadQueries = () => {
             try {
                 const savedQueries = localStorage.getItem('scrapedQueries');
@@ -203,7 +39,7 @@ const App = () => {
                     const parsedQueries = JSON.parse(savedQueries);
                     setQueries(Array.isArray(parsedQueries) ? parsedQueries : []);
                 }
-                
+
                 const savedOptimizedQueries = localStorage.getItem('optimizedQueries');
                 if (savedOptimizedQueries && isMounted) {
                     const parsedOptimizedQueries = JSON.parse(savedOptimizedQueries);
@@ -213,9 +49,9 @@ const App = () => {
                 logger.error("Fallo al cargar consultas desde localStorage", { error: e instanceof Error ? e.message : 'Error desconocido' });
             }
         };
-        
+
         loadQueries();
-        
+
         return () => {
             isMounted = false;
         };
@@ -253,11 +89,11 @@ const App = () => {
         try {
             const robotsUrl = new URL('/robots.txt', baseUrl).href;
             const response = await fetch(`${CORS_PROXY}${encodeURIComponent(robotsUrl)}`);
-            
+
             if (!response.ok) {
                 return 'No se encontró archivo robots.txt';
             }
-            
+
             return await response.text();
         } catch (error) {
             return 'Error al obtener robots.txt: ' + (error instanceof Error ? error.message : 'Error desconocido');
@@ -267,14 +103,14 @@ const App = () => {
     const detectUsersInContent = (html: string): { hasUsers: boolean; accessPoints: string[] } => {
         // Usar un solo regex combinado para mejor rendimiento
         const combinedPattern = /(login|register|sign\s*in|sign\s*up|profile|account|dashboard|admin|user|member|author|usuarios|miembros|perfiles|cuentas|iniciar\s*sesión|registr[ao])/gi;
-        
+
         const accessPoints: string[] = [];
         const foundMatches = new Set<string>();
-        
+
         let match;
         while ((match = combinedPattern.exec(html)) !== null) {
             const matchText = match[0].toLowerCase();
-            
+
             // Mapear coincidencias a etiquetas legibles
             if (/login|iniciar\s*sesión/.test(matchText)) foundMatches.add('Iniciar Sesión');
             else if (/register|registr[ao]/.test(matchText)) foundMatches.add('Registro');
@@ -292,9 +128,9 @@ const App = () => {
             else if (/perfiles/.test(matchText)) foundMatches.add('Perfiles');
             else if (/cuentas/.test(matchText)) foundMatches.add('Cuentas');
         }
-        
-        return { 
-            hasUsers: foundMatches.size > 0, 
+
+        return {
+            hasUsers: foundMatches.size > 0,
             accessPoints: Array.from(foundMatches)
         };
     };
@@ -303,11 +139,11 @@ const App = () => {
     const extractKeywords = (html: string, data: ScrapedData): string[] => {
         const keywords: string[] = [];
         const textContent = html.toLowerCase();
-        
+
         // Palabras clave de tecnología
         const techKeywords = data.technologies.map(tech => tech.name);
         keywords.push(...techKeywords);
-        
+
         // Palabras clave de e-commerce
         const ecommerceKeywords = [
             'tienda', 'shop', 'store', 'producto', 'product', 'precio', 'price',
@@ -318,7 +154,7 @@ const App = () => {
                 keywords.push(keyword);
             }
         });
-        
+
         // Palabras clave de seguridad
         const securityKeywords = [
             'seguridad', 'security', 'ssl', 'https', 'certificado', 'certificate',
@@ -329,29 +165,29 @@ const App = () => {
                 keywords.push(keyword);
             }
         });
-        
+
         // Extraer keywords de meta description
         if (data.meta.keywords) {
             const metaKeywords = data.meta.keywords.split(',').map(k => k.trim().toLowerCase());
             keywords.push(...metaKeywords);
         }
-        
+
         // Extraer palabras de headings más importantes
         const importantHeadings = [...data.headings.h1, ...data.headings.h2].filter(Boolean);
         importantHeadings.forEach(heading => {
             const words = heading!.split(' ').slice(0, 3); // Primeras 3 palabras
             keywords.push(...words.map(w => w.toLowerCase()));
         });
-        
+
         // Remover duplicados y limitar a 10 keywords más relevantes
         const uniqueKeywords = [...new Set(keywords)]
             .filter(k => k.length > 2) // Filtrar palabras muy cortas
             .slice(0, 10);
-        
+
         return uniqueKeywords;
     };
     // --- FUNCIONES PARA OPTIMIZACIÓN DE TÍTULOS SIN TECNOLOGÍAS ---
-    
+
     /**
      * Extrae palabras clave específicas de URLs sin incluir tecnologías
      * Enfocándose en contenido temático y propósito del sitio
@@ -361,7 +197,7 @@ const App = () => {
         const textContent = html.toLowerCase();
         const urlObj = new URL(url);
         const pathSegments = urlObj.pathname.split('/').filter(segment => segment.length > 0);
-        
+
         // Extraer keywords del pathname de la URL
         pathSegments.forEach(segment => {
             const cleanedSegment = segment.replace(/[-_]/g, ' ').trim();
@@ -369,7 +205,7 @@ const App = () => {
                 keywords.push(cleanedSegment);
             }
         });
-        
+
         // Keywords específicos por tipo de contenido (sin tecnologías)
         const contentKeywords = {
             ecommerce: [
@@ -394,14 +230,14 @@ const App = () => {
                 'línea', 'line', 'marca', 'brand', 'fabricante', 'manufacturer'
             ]
         };
-        
+
         // Buscar keywords de contenido temático
         Object.values(contentKeywords).flat().forEach(keyword => {
             if (textContent.includes(keyword)) {
                 keywords.push(keyword);
             }
         });
-        
+
         // Keywords de e-commerce si hay productos
         if (data.ecommerce.totalProducts > 0) {
             const ecommerceTerms = ['productos', 'tienda', 'comprar', 'precios', 'ofertas'];
@@ -411,20 +247,20 @@ const App = () => {
                 }
             });
         }
-        
+
         // Extraer del título original sin tecnologías
         if (data.title) {
             const titleWords = data.title
                 .toLowerCase()
                 .replace(/[-|]/g, ' ')
                 .split(/\s+/)
-                .filter(word => 
-                    word.length > 2 && 
+                .filter(word =>
+                    word.length > 2 &&
                     !/react|angular|vue|bootstrap|jquery|wordpress|php|html|css|javascript|js|ts|node/i.test(word)
                 );
             keywords.push(...titleWords.slice(0, 3));
         }
-        
+
         // Extraer de meta description
         if (data.meta.description) {
             const descWords = data.meta.description
@@ -433,7 +269,7 @@ const App = () => {
                 .filter(word => word.length > 3);
             keywords.push(...descWords.slice(0, 4));
         }
-        
+
         // Extraer de headings importantes
         const importantHeadings = [...data.headings.h1, ...data.headings.h2].filter(Boolean);
         importantHeadings.forEach(heading => {
@@ -444,19 +280,19 @@ const App = () => {
                 .filter(word => word.length > 3);
             keywords.push(...words.slice(0, 2));
         });
-        
+
         // Filtrar y limpiar keywords
         const cleanKeywords = [...new Set(keywords)]
-            .filter(keyword => 
-                keyword.length > 2 && 
+            .filter(keyword =>
+                keyword.length > 2 &&
                 !/^(the|and|or|but|in|on|at|to|for|of|with|by|from|up|about|into|through|during|before|after|above|below|between|among|through)$/i.test(keyword) &&
                 !/^\d+$/.test(keyword)
             )
             .slice(0, 12); // Máximo 12 keywords para evitar sobrecarga
-        
+
         return cleanKeywords;
     };
-    
+
     /**
      * Valida keywords buscando coincidencias en la web
      * Simula búsqueda web para determinar relevancia de keywords
@@ -465,19 +301,19 @@ const App = () => {
         const results: { keyword: string; relevanceScore: number; matchType: string }[] = [];
         const urlObj = new URL(baseUrl);
         const domain = urlObj.hostname.replace('www.', '');
-        
+
         // Simulación de búsqueda web con diferentes tipos de coincidencias
         for (const keyword of keywords) {
             let relevanceScore = 0;
             let matchType = 'none';
-            
+
             // Búsqueda en el dominio actual
-            if (domain.toLowerCase().includes(keyword.toLowerCase()) || 
+            if (domain.toLowerCase().includes(keyword.toLowerCase()) ||
                 baseUrl.toLowerCase().includes(keyword.toLowerCase())) {
                 relevanceScore += 40;
                 matchType = 'domain';
             }
-            
+
             // Búsqueda en contenido específico
             const keywordPatterns = {
                 'ecommerce': /(tienda|shop|store|productos|precio|comprar|carrito)/i,
@@ -486,7 +322,7 @@ const App = () => {
                 'productos': /(productos|catálogo|colección|línea|marca)/i,
                 'empresa': /(empresa|organización|corporativo|nosotros)/i
             };
-            
+
             for (const [type, pattern] of Object.entries(keywordPatterns)) {
                 if (pattern.test(keyword)) {
                     relevanceScore += 30;
@@ -494,44 +330,44 @@ const App = () => {
                     break;
                 }
             }
-            
+
             // Bonificación por palabras clave comerciales
             if (/(precio|oferta|descuento|promoción|sale|deal)/i.test(keyword)) {
                 relevanceScore += 25;
                 matchType = matchType === 'none' ? 'commercial' : matchType;
             }
-            
+
             // Bonificación por palabras de acción
             if (/(comprar|buy|contactar|contact|visitar|visit)/i.test(keyword)) {
                 relevanceScore += 20;
                 matchType = matchType === 'none' ? 'action' : matchType;
             }
-            
+
             // Penalización por palabras muy genéricas
             if (/(welcome|inicio|home|principal|principal)/i.test(keyword)) {
                 relevanceScore -= 10;
             }
-            
+
             // Asegurar score mínimo para keywords que aparecen en URL
             if (baseUrl.toLowerCase().includes(keyword.toLowerCase()) && relevanceScore < 50) {
                 relevanceScore = 50;
                 matchType = 'url_exact';
             }
-            
+
             results.push({
                 keyword,
                 relevanceScore: Math.max(0, Math.min(100, relevanceScore)),
                 matchType
             });
         }
-        
+
         // Ordenar por relevancia y retornar top keywords
         return results
             .filter(result => result.relevanceScore > 0)
             .sort((a, b) => b.relevanceScore - a.relevanceScore)
             .slice(0, 8);
     };
-    
+
     /**
      * Extrae el título desde 'www.' hasta la extensión del dominio (.com, .co, etc.)
      * Convierte puntos y guiones en espacios y mejora la capitalización
@@ -606,7 +442,7 @@ const App = () => {
                     if (match) {
                         const [, letters, numbers, rest] = match;
                         return letters.charAt(0).toUpperCase() + letters.slice(1).toLowerCase() +
-                               numbers + rest.toLowerCase();
+                            numbers + rest.toLowerCase();
                     }
                 }
 
@@ -660,16 +496,16 @@ const App = () => {
     ): { optimizedTitle: string; matchPercentage: number } => {
         // Extraer título directamente del dominio
         const optimizedTitle = extractTitleFromDomain(url);
-        
+
         // Como el título viene directamente del dominio, asignamos alta relevancia
         const matchPercentage = 85;
-        
+
         return {
             optimizedTitle,
             matchPercentage
         };
     };
-    
+
     /**
      * Función mejorada para extraer palabras clave SIN tecnologías
      * Usada para el historial optimizado
@@ -677,7 +513,7 @@ const App = () => {
     const extractKeywordsWithoutTech = (html: string, data: ScrapedData): string[] => {
         const keywords: string[] = [];
         const textContent = html.toLowerCase();
-        
+
         // Palabras clave de e-commerce (SIN tecnologías)
         const ecommerceKeywords = [
             'tienda', 'shop', 'store', 'producto', 'product', 'precio', 'price',
@@ -689,7 +525,7 @@ const App = () => {
                 keywords.push(keyword);
             }
         });
-        
+
         // Palabras clave de contenido
         const contentKeywords = [
             'servicios', 'services', 'blog', 'noticias', 'news', 'recursos', 'resources',
@@ -700,21 +536,21 @@ const App = () => {
                 keywords.push(keyword);
             }
         });
-        
+
         // Extraer de headings importantes SIN tecnologías
         const importantHeadings = [...data.headings.h1, ...data.headings.h2].filter(Boolean);
         importantHeadings.forEach(heading => {
             const words = heading!
                 .split(' ')
                 .slice(0, 3) // Primeras 3 palabras
-                .filter(word => 
-                    word.length > 3 && 
+                .filter(word =>
+                    word.length > 3 &&
                     !/react|angular|vue|bootstrap|jquery|wordpress|php|html|css|javascript|js|ts|node/i.test(word)
                 )
                 .map(w => w.toLowerCase());
             keywords.push(...words);
         });
-        
+
         // Extraer keywords de meta description
         if (data.meta.keywords) {
             const metaKeywords = data.meta.keywords
@@ -723,12 +559,12 @@ const App = () => {
                 .filter(k => k.length > 2 && !/react|angular|vue|bootstrap|jquery/i.test(k));
             keywords.push(...metaKeywords);
         }
-        
+
         // Remover duplicados y limitar
         const uniqueKeywords = [...new Set(keywords)]
             .filter(k => k.length > 2)
             .slice(0, 8);
-        
+
         return uniqueKeywords;
     };
 
@@ -737,21 +573,21 @@ const App = () => {
         try {
             const robotsUrl = new URL('/robots.txt', baseUrl).href;
             const response = await fetch(`${CORS_PROXY}${encodeURIComponent(robotsUrl)}`);
-            
+
             if (!response.ok) {
                 return true; // Si no existe robots.txt, asumimos permitido
             }
-            
+
             const robotsText = await response.text();
             const userAgent = 'ScrapiiBot/2.0';
             const lowerText = robotsText.toLowerCase();
-            
+
             // Verificar si hay directivas de Disallow generales
             const hasGeneralDisallow = lowerText.includes('disallow: /');
-            
+
             // Verificar si hay User-Agent específico para nuestro bot
             const hasSpecificUserAgent = lowerText.includes(`user-agent: ${userAgent.toLowerCase()}`);
-            
+
             // Si hay User-Agent específico, verificar sus reglas
             if (hasSpecificUserAgent) {
                 const userAgentSection = extractUserAgentSection(robotsText, userAgent);
@@ -759,13 +595,13 @@ const App = () => {
                     return !userAgentSection.includes('disallow: /');
                 }
             }
-            
+
             // Si hay User-Agent * (general), verificar sus reglas
             const hasWildcardUserAgent = lowerText.includes('user-agent: *');
             if (hasWildcardUserAgent && hasGeneralDisallow) {
                 return false;
             }
-            
+
             return true;
         } catch (error) {
             logger.warn('Error validando robots.txt', { error: error });
@@ -777,10 +613,10 @@ const App = () => {
         const lines = robotsText.split('\n');
         let inTargetSection = false;
         let sectionContent = '';
-        
+
         for (const line of lines) {
             const lowerLine = line.toLowerCase().trim();
-            
+
             if (lowerLine.startsWith('user-agent:')) {
                 if (lowerLine.includes(userAgent.toLowerCase()) || lowerLine.includes('*')) {
                     inTargetSection = true;
@@ -791,42 +627,42 @@ const App = () => {
                 }
             } else if (inTargetSection) {
                 sectionContent += line + '\n';
-                
+
                 // Si encontramos otro User-Agent, terminar la sección
                 if (lowerLine.startsWith('user-agent:')) {
                     break;
                 }
             }
         }
-        
+
         return sectionContent.trim() || null;
     };
 
     const analyzeTermsOfService = async (baseUrl: string): Promise<{ allowed: boolean; checked: boolean }> => {
         const commonPaths = [
-            '/terms', '/terms-of-service', '/tos', '/legal', '/privacy', 
+            '/terms', '/terms-of-service', '/tos', '/legal', '/privacy',
             '/privacy-policy', '/conditions', '/conditions-of-use'
         ];
-        
+
         let scrapingProhibited = false;
         let checked = false;
-        
+
         for (const path of commonPaths) {
             try {
                 const termsUrl = new URL(path, baseUrl).href;
                 const response = await fetch(`${CORS_PROXY}${encodeURIComponent(termsUrl)}`);
-                
+
                 if (response.ok) {
                     checked = true;
                     const html = await response.text();
                     const text = html.toLowerCase();
-                    
+
                     // Buscar términos relacionados con restricciones de scraping
                     const restrictions = [
                         'scraping', 'scrape', 'crawl', 'crawler',
                         'no scraping', 'no automated access'
                     ];
-                    
+
                     if (restrictions.some(term => text.includes(term))) {
                         scrapingProhibited = true;
                         break;
@@ -837,10 +673,10 @@ const App = () => {
                 continue;
             }
         }
-        
-        return { 
-            allowed: !scrapingProhibited, 
-            checked 
+
+        return {
+            allowed: !scrapingProhibited,
+            checked
         };
     };
 
@@ -855,23 +691,23 @@ const App = () => {
         const xFrameOptions = headers.get('x-frame-options');
         const serverHeader = headers.get('server');
         const poweredBy = headers.get('x-powered-by');
-        
+
         // Verificar CSP más detalladamente
         let cspValid = false;
         if (csp) {
             const cspParts = csp.toLowerCase();
-            cspValid = cspParts.includes('default-src') && 
-                      cspParts.includes('script-src') &&
-                      (cspParts.includes('unsafe-inline') === false || cspParts.includes('nonce-') || cspParts.includes('sha256-'));
+            cspValid = cspParts.includes('default-src') &&
+                cspParts.includes('script-src') &&
+                (cspParts.includes('unsafe-inline') === false || cspParts.includes('nonce-') || cspParts.includes('sha256-'));
         }
-        
+
         // Verificar HSTS más detalladamente
         let hstsValid = false;
         if (hsts) {
-            hstsValid = hsts.includes('max-age=') && 
-                       parseInt(hsts.match(/max-age=(\d+)/)?.[1] || '0') >= 31536000; // 1 año
+            hstsValid = hsts.includes('max-age=') &&
+                parseInt(hsts.match(/max-age=(\d+)/)?.[1] || '0') >= 31536000; // 1 año
         }
-        
+
         // Verificar XSS protection
         let xssValid = false;
         if (xssProtection) {
@@ -879,27 +715,27 @@ const App = () => {
         } else if (csp) {
             xssValid = csp.toLowerCase().includes('object-src') && csp.toLowerCase().includes('script-src');
         }
-        
+
         // Verificar Content-Type
         let contentTypeValid = contentType?.toLowerCase() === 'nosniff';
-        
+
         // Verificar Referrer Policy
         let referrerPolicyValid = false;
         if (referrerPolicy) {
             const validPolicies = ['no-referrer', 'strict-origin-when-cross-origin', 'no-referrer-when-downgrade'];
-            referrerPolicyValid = validPolicies.some(policy => 
+            referrerPolicyValid = validPolicies.some(policy =>
                 referrerPolicy.toLowerCase().includes(policy)
             );
         }
-        
+
         // Verificar X-Frame-Options
         let frameOptionsValid = false;
         if (xFrameOptions) {
-            frameOptionsValid = ['deny', 'sameorigin', 'allow-from'].some(option => 
+            frameOptionsValid = ['deny', 'sameorigin', 'allow-from'].some(option =>
                 xFrameOptions.toLowerCase().includes(option)
             );
         }
-        
+
         // Verificar si exponen información sensible
         let serverExposed = false;
         if (serverHeader) {
@@ -907,7 +743,7 @@ const App = () => {
             const serverPatterns = [/apache/i, /nginx/i, /iis/i, /lighttpd/i, /tomcat/i];
             serverExposed = serverPatterns.some(pattern => pattern.test(serverHeader));
         }
-        
+
         let poweredByExposed = false;
         if (poweredBy) {
             // Verificar si expone información del framework
@@ -959,18 +795,18 @@ const App = () => {
     const analyzeSSL = (url: string, response: Response): SSLAnalysis => {
         const isHttps = url.startsWith('https://');
         const headers = response.headers;
-        
+
         let additionalInfo: SSLAnalysis['additionalInfo'] = undefined;
-        
+
         if (isHttps) {
             const serverHeader = headers.get('server');
             const strictTransportSecurity = headers.get('strict-transport-security');
-            
+
             // Estimar versión del protocolo basada en headers del servidor
             let protocolVersion = 'TLS 1.2+';
             if (serverHeader?.includes('Apache/2.4')) protocolVersion = 'TLS 1.2';
             if (serverHeader?.includes('nginx/1.16')) protocolVersion = 'TLS 1.2';
-            
+
             additionalInfo = {
                 certificateIssuer: serverHeader?.includes('Let\'s Encrypt') ? 'Let\'s Encrypt' : 'Unknown',
                 protocolVersion,
@@ -981,7 +817,7 @@ const App = () => {
                 }
             };
         }
-        
+
         return {
             hasSSL: isHttps,
             validCertificate: isHttps,
@@ -993,7 +829,7 @@ const App = () => {
 
     const detectVulnerableTechnologies = (technologies: any[], html: string): VulnerableTechnology[] => {
         const vulnerable: VulnerableTechnology[] = [];
-        
+
         // Función para verificar si una cadena es un patrón seguro conocido
         const isSafeKnownPattern = (text: string): boolean => {
             const safePatterns = [
@@ -1005,20 +841,20 @@ const App = () => {
                 /^firebase[_-]?[a-zA-Z0-9_-]*$/, // Firebase keys
                 /^pk_test_[a-zA-Z0-9]{24,}$/, // Stripe test keys (seguros)
                 /^pk_live_[a-zA-Z0-9]{24,}$/, // Stripe live public keys (seguros)
-                
+
                 // Facebook/Meta
                 /^fb\d{13,}$/, // Facebook App ID
                 /^ca\d{19}$/, // Facebook App ID alternativo
-                
+
                 // GitHub (tokens públicos de solo lectura)
                 /^ghp_[a-zA-Z0-9]{36}$/, // GitHub Personal Access Token
-                
+
                 // Otros servicios seguros comunes
                 /^eyJ[a-zA-Z0-9_-]*$/, // JWT tokens (generalmente seguros en frontend)
                 /^[a-zA-Z0-9_-]{32}$/, // Patrones genéricos de 32 chars (muchos son seguros)
                 /^[a-zA-Z0-9_-]{40}$/, // Patrones genéricos de 40 chars
             ];
-            
+
             return safePatterns.some(pattern => pattern.test(text));
         };
 
@@ -1026,7 +862,7 @@ const App = () => {
         // EXCLUSIONES COMPLETAS: APIs legítimas de Google y otros servicios seguros
         const credentialPatterns = [
             // API Keys y tokens (EXCLUYENDO COMPLETAMENTE PATRONES SEGUROS)
-            { 
+            {
                 pattern: /api[_-]?key["']?\s*[:=]\s*["'](?!AIzaSy|GTM-|UA-|G-|fb|ghp_)[a-zA-Z0-9]{32,}["']/gi,
                 vulnerability: 'Hardcoded API Key detected (NO Google APIs)',
                 severity: 'critical' as const,
@@ -1236,21 +1072,21 @@ const App = () => {
 
             // COMANDOS DEL SISTEMA Y ARCHIVOS
             {
-                pattern: /exec\s*\(/gi,
+                pattern: /(?<!\.)\bexec\s*\(/gi,
                 vulnerability: 'System command execution vulnerability',
                 severity: 'critical' as const,
                 exploitation: 'exec() permite ejecución de comandos del sistema sin validación',
                 recommendation: 'Evitar ejecución de comandos, usar APIs seguras del sistema'
             },
             {
-                pattern: /system\s*\(/gi,
+                pattern: /(?<!\.)\bsystem\s*\(/gi,
                 vulnerability: 'System command execution vulnerability',
                 severity: 'critical' as const,
                 exploitation: 'system() permite ejecución de comandos shell con privilegios',
                 recommendation: 'Eliminar system(), usar APIs nativas del lenguaje'
             },
             {
-                pattern: /shell_exec\s*\(/gi,
+                pattern: /(?<!\.)\bshell_exec\s*\(/gi,
                 vulnerability: 'Shell command execution vulnerability',
                 severity: 'critical' as const,
                 exploitation: 'shell_exec() permite ejecución de comandos shell sin restricciones',
@@ -1346,17 +1182,17 @@ const App = () => {
         ];
 
         // 3. DETECCIÓN DE TECNOLOGÍAS VULNERABLES POR VERSIÓN
-        const vulnerabilityDatabase: Record<string, { 
-            versions?: string[]; 
+        const vulnerabilityDatabase: Record<string, {
+            versions?: string[];
             patterns?: RegExp[];
-            vulnerability: string; 
+            vulnerability: string;
             severity: VulnerableTechnology['severity'];
             cveId?: string;
             recommendation: string;
             exploitation_details: string;
         }> = {
             // JAVASCRIPT FRAMEWORKS Y LIBRARIES
-            'jQuery': { 
+            'jQuery': {
                 versions: ['1.', '2.', '3.0.', '3.1.', '3.2.', '3.3.', '3.4.'],
                 vulnerability: 'jQuery XSS vulnerabilities and prototype pollution (CVE-2020-11022, CVE-2020-11023)',
                 severity: 'high',
@@ -1364,7 +1200,7 @@ const App = () => {
                 recommendation: 'Actualizar a jQuery 3.5.1+ con patch de seguridad. Implementar sanitización de inputs y usar .text() en lugar de .html()',
                 exploitation_details: 'Permite ejecución de código JavaScript arbitrario a través de manipulación de DOM, prototype pollution y bypass de sanitización'
             },
-            'React': { 
+            'React': {
                 versions: ['15.', '16.', '17.0.', '17.1.', '17.2.'],
                 vulnerability: 'XSS vulnerability via dangerouslySetInnerHTML and URL parsing (CVE-2019-7580)',
                 severity: 'high',
@@ -1372,7 +1208,7 @@ const App = () => {
                 recommendation: 'Actualizar a React 18+ inmediatamente. Eliminar dangerouslySetInnerHTML. Implementar sanitización con sanitize-html o DOMPurify',
                 exploitation_details: 'Permite inyección de scripts maliciosos a través de contenido HTML no sanitizado en componentes React, bypass de virtual DOM'
             },
-            'WordPress': { 
+            'WordPress': {
                 versions: ['4.', '5.0.', '5.1.', '5.2.', '5.3.', '5.4.', '5.5.', '5.6.', '5.7.', '5.8.', '5.9.', '6.0.', '6.1.', '6.2.', '6.3.'],
                 vulnerability: 'WordPress XSS, SQL Injection, RCE y subida de archivos maliciosos (Multiple CVEs)',
                 severity: 'critical',
@@ -1380,7 +1216,7 @@ const App = () => {
                 recommendation: 'ACTUALIZAR WordPress a 6.4+ INMEDIATAMENTE. Aplicar todos los security patches críticos. Instalar plugins de seguridad como Wordfence',
                 exploitation_details: 'Vulnerabilidades críticas que permiten ejecución remota de código completa, inyección SQL sin autenticación, escalación de privilegios y bypass de autenticación'
             },
-            'PHP': { 
+            'PHP': {
                 versions: ['5.', '7.0.', '7.1.', '7.2.', '7.3.', '7.4.', '8.0.', '8.1.', '8.2.'],
                 vulnerability: 'PHP múltiples vulnerabilidades RCE, inclusión de archivos y bypass de restricciones (CVE-2023-3247)',
                 severity: 'critical',
@@ -1388,7 +1224,7 @@ const App = () => {
                 recommendation: 'Actualizar PHP a 8.3+ INMEDIATAMENTE. Deshabilitar funciones peligrosas (eval, exec, shell_exec, file_get_contents remotos)',
                 exploitation_details: 'Permite inclusión de archivos remotos, ejecución de comandos del sistema sin restricciones, bypass de open_basedir y escalación completa del sistema'
             },
-            'Angular': { 
+            'Angular': {
                 versions: ['1.', '2.', '4.', '5.', '6.', '7.', '8.', '9.', '10.', '11.', '12.', '13.', '14.', '15.', '16.'],
                 vulnerability: 'Angular XSS vulnerability in template parsing y dependency injection (CVE-2020-5216)',
                 severity: 'high',
@@ -1396,7 +1232,7 @@ const App = () => {
                 recommendation: 'Actualizar Angular a 17+ (LTS). Implementar sanitización de templates con DomSanitizerstrict',
                 exploitation_details: 'Permite ejecución de scripts maliciosos a través de templates Angular con contenido no sanitizado, bypass de sanitización'
             },
-            'Vue.js': { 
+            'Vue.js': {
                 versions: ['2.0.', '2.1.', '2.2.', '2.3.', '2.4.', '2.5.', '2.6.', '3.0.', '3.1.', '3.2.', '3.3.'],
                 vulnerability: 'XSS vulnerability via v-html directive y template injection (CVE-2023-2649)',
                 severity: 'high',
@@ -1464,14 +1300,14 @@ const App = () => {
                     const keyValueMatch = match.match(/["']([^"']+)["']/);
                     if (keyValueMatch && keyValueMatch[1]) {
                         const keyValue = keyValueMatch[1];
-                        
+
                         // PRIMER FILTRO: Patrones conocidos seguros (Google APIs, etc.)
                         if (isSafeKnownPattern(keyValue)) {
                             return false; // Excluir completamente
                         }
-                        
+
                         // SEGUNDO FILTRO: APIs y servicios legítimos por contexto
-                        const isLegitimateService = 
+                        const isLegitimateService =
                             keyValue.toLowerCase().includes('google') ||
                             keyValue.toLowerCase().includes('firebase') ||
                             keyValue.toLowerCase().includes('gtm') ||
@@ -1479,7 +1315,7 @@ const App = () => {
                             keyValue.toLowerCase().startsWith('pk_') || // Stripe public keys
                             keyValue.toLowerCase().startsWith('ua-') || // Google Analytics
                             keyValue.toLowerCase().startsWith('g-');   // Google Analytics 4
-                        
+
                         if (isLegitimateService) {
                             return false; // Excluir servicios legítimos
                         }
@@ -1548,17 +1384,17 @@ const App = () => {
             const vuln = vulnerabilityDatabase[tech.name];
             if (vuln && tech.version) {
                 let isVulnerable = false;
-                
+
                 if (vuln.versions) {
-                    isVulnerable = vuln.versions.some(vulnerableVersion => 
+                    isVulnerable = vuln.versions.some(vulnerableVersion =>
                         tech.version.startsWith(vulnerableVersion)
                     );
                 }
-                
+
                 if (vuln.patterns && !isVulnerable) {
                     isVulnerable = vuln.patterns.some(pattern => pattern.test(tech.version));
                 }
-                
+
                 if (isVulnerable) {
                     vulnerable.push({
                         name: tech.name,
@@ -1643,19 +1479,33 @@ const App = () => {
         try {
             // 1. Determinar tipo de sitio automáticamente
             const siteType = realisticSecurityCalculator.determineSiteType(data);
-            
+
             // 2. Generar contexto del sitio para análisis contextual
             const siteContext = realisticSecurityCalculator.generateSiteContext(data, siteType);
-            
+
             // 3. Filtrar vulnerabilidades eliminando falsos positivos
             const filteredVulnerabilities = SecurityIntegrationUtils.filterFalsePositives(data.securityAnalysis.vulnerableTechnologies);
-            
-            // 4. Normalizar headers al formato estándar
-            const normalizedHeaders = SecurityIntegrationUtils.normalizeHeaders(data.securityAnalysis.securityHeaders);
-            
-            // 5. Normalizar vulnerabilidades al formato estándar
-            const normalizedVulnerabilities = SecurityIntegrationUtils.normalizeVulnerabilities(filteredVulnerabilities);
-            
+
+            // 4. Normalizar headers al formato estándar (inline)
+            const headers = data.securityAnalysis.securityHeaders;
+            const normalizedHeaders = {
+                'content-security-policy': headers.detailed?.csp?.present ? headers.detailed.csp.content : undefined,
+                'strict-transport-security': headers.detailed?.hsts?.present ? headers.detailed.hsts.content : undefined,
+                'x-frame-options': headers.detailed?.frameOptions?.present ? headers.detailed.frameOptions.content : undefined,
+                'x-content-type-options': headers.contentType ? 'nosniff' : undefined,
+                'referrer-policy': headers.detailed?.referrerPolicy?.present ? headers.detailed.referrerPolicy.content : undefined,
+                'permissions-policy': undefined, // No está en el tipo actual
+                'x-xss-protection': headers.detailed?.xssProtection?.present ? headers.detailed.xssProtection.content : undefined
+            };
+
+            // 5. Normalizar vulnerabilidades al formato estándar (inline)
+            const normalizedVulnerabilities = {
+                critical: filteredVulnerabilities.filter(v => v.severity === 'critical').length,
+                high: filteredVulnerabilities.filter(v => v.severity === 'high').length,
+                medium: filteredVulnerabilities.filter(v => v.severity === 'medium').length,
+                low: filteredVulnerabilities.filter(v => v.severity === 'low').length
+            };
+
             // 6. Calcular score usando el sistema inteligente
             const securityScore = realisticSecurityCalculator.calculateRealisticScore(
                 normalizedHeaders,
@@ -1663,7 +1513,7 @@ const App = () => {
                 siteType,
                 siteContext
             );
-            
+
             // 7. Log para debug del nuevo sistema
             logger.info('Nuevo sistema de scoring aplicado', {
                 siteType,
@@ -1673,39 +1523,39 @@ const App = () => {
                 grade: securityScore.grade,
                 riskLevel: securityScore.riskLevel
             });
-            
+
             return securityScore.overall;
-            
+
         } catch (error) {
             // Fallback al sistema anterior si hay error en el nuevo sistema
             logger.warn('Error en nuevo sistema de scoring, usando fallback', { error });
-            
+
             // Sistema de fallback simplificado pero más inteligente que el anterior
             let score = 80; // Score base más realista
-            
+
             // Headers con ponderación más justa
             if (data.securityAnalysis.securityHeaders.csp) score += 10;
             if (data.securityAnalysis.securityHeaders.hsts) score += 8;
             if (data.securityAnalysis.securityHeaders.xss) score += 5;
             if (data.securityAnalysis.securityHeaders.contentType) score += 3;
-            
+
             // SSL/TLS
             if (data.securityAnalysis.sslAnalysis.httpsEnabled) score += 12;
-            
+
             // Vulnerabilidades con penalización moderada
             const criticalVulns = data.securityAnalysis.vulnerableTechnologies.filter(v => v.severity === 'critical').length;
             const highVulns = data.securityAnalysis.vulnerableTechnologies.filter(v => v.severity === 'high').length;
             const mediumVulns = data.securityAnalysis.vulnerableTechnologies.filter(v => v.severity === 'medium').length;
-            
+
             score -= Math.min(criticalVulns * 15, 25);
             score -= Math.min(highVulns * 8, 20);
             score -= Math.min(mediumVulns * 3, 10);
-            
+
             // Garantizar score mínimo para sitios con HTTPS
             if (data.securityAnalysis.sslAnalysis.httpsEnabled) {
                 score = Math.max(score, 65);
             }
-            
+
             return Math.max(0, Math.min(100, Math.round(score)));
         }
     };
@@ -1736,11 +1586,11 @@ const App = () => {
 
         links.forEach(link => {
             if (!link.href) return;
-            
+
             try {
                 const linkUrl = new URL(link.href, baseUrl);
                 const linkHostname = linkUrl.hostname;
-                
+
                 if (linkHostname !== baseHostname && linkHostname.endsWith('.' + baseDomain)) {
                     if (linkUrl.origin !== baseOrigin) {
                         subdomains.add(linkUrl.origin);
@@ -1845,11 +1695,11 @@ const App = () => {
 
     const detectTechnologyVersion = (html: string, techName: string): string | undefined => {
         const htmlLower = html.toLowerCase();
-        
+
         if (!htmlLower.includes(techName.toLowerCase().replace(/[^a-z]/g, ''))) {
             return undefined;
         }
-        
+
         const versionPatterns = {
             'React': [
                 /react[.\-]?\d+\.\d+\.\d+/,
@@ -1908,7 +1758,7 @@ const App = () => {
                         return versionMatch[0];
                     }
                 }
-                
+
                 if (pattern.flags.includes('g')) {
                     const allMatches = Array.from(htmlLower.matchAll(pattern));
                     for (const match of allMatches) {
@@ -1926,7 +1776,7 @@ const App = () => {
         if (!patterns) {
             const cleanTechName = techName.toLowerCase().replace(/[^a-z]/g, '');
             const genericPattern = new RegExp(`${cleanTechName}[.\-@_\\s]*v?(\\d+\\.\\d+(?:\\.\\d+)?)`, 'g');
-            
+
             const allMatches = Array.from(htmlLower.matchAll(genericPattern));
             for (const match of allMatches) {
                 if (match[1] && match[1].match(/^\d+\.\d+(?:\.\d+)?$/)) {
@@ -1944,7 +1794,7 @@ const App = () => {
         const scripts = Array.from(doc.querySelectorAll('script'));
         const links = Array.from(doc.querySelectorAll('link[href]'));
         const metaGenerator = doc.querySelector('meta[name="generator"]')?.getAttribute('content') || '';
-        
+
         // Frameworks y librerías de JavaScript
         if (html.includes('react') || doc.querySelector('[data-reactroot], [data-react]') || scripts.some(s => s.src?.includes('react'))) technologies.add('React');
         if (html.includes('vue') || doc.querySelector('#app[data-v-app]') || scripts.some(s => s.src?.includes('vue'))) technologies.add('Vue.js');
@@ -1958,7 +1808,7 @@ const App = () => {
         if (html.includes('bulma') || doc.querySelector('.is-primary')) technologies.add('Bulma');
         if (html.includes('foundation') || doc.querySelector('[data-sticky]')) technologies.add('Foundation');
         if (html.includes('semantic-ui') || doc.querySelector('.ui.segment')) technologies.add('Semantic UI');
-        
+
         // Frameworks de JavaScript modernos
         if (doc.querySelector('#__next') || html.includes('next')) technologies.add('Next.js');
         if (html.includes('nuxt') || doc.querySelector('[data-n-head]')) technologies.add('Nuxt.js');
@@ -1966,7 +1816,7 @@ const App = () => {
         if (html.includes('vite') || doc.querySelector('[data-vite-plugin]')) technologies.add('Vite');
         if (html.includes('webpack') || scripts.some(s => s.src?.includes('webpack'))) technologies.add('Webpack');
         if (html.includes('rollup') || scripts.some(s => s.src?.includes('rollup'))) technologies.add('Rollup');
-        
+
         // CMS y plataformas
         if (metaGenerator.includes('WordPress') || html.includes('wp-content') || html.includes('wordpress')) technologies.add('WordPress');
         if (metaGenerator.includes('Shopify') || html.includes('shopify')) technologies.add('Shopify');
@@ -1977,7 +1827,7 @@ const App = () => {
         if (html.includes('notion') || html.includes('notion.so')) technologies.add('Notion');
         if (html.includes('wix') || html.includes('wixstatic')) technologies.add('Wix');
         if (html.includes('squarespace') || html.includes('squarespace.com')) technologies.add('Squarespace');
-        
+
         // Lenguajes y frameworks de backend
         if (html.includes('php') || html.includes('.php') || metaGenerator.includes('php')) technologies.add('PHP');
         if (html.includes('asp.net') || html.includes('.aspx') || metaGenerator.includes('asp.net')) technologies.add('ASP.NET');
@@ -1988,18 +1838,18 @@ const App = () => {
         if (html.includes('laravel') || html.includes('laravel')) technologies.add('Laravel');
         if (html.includes('spring') || html.includes('spring boot')) technologies.add('Spring');
         if (html.includes('fastapi') || html.includes('swagger-ui')) technologies.add('FastAPI');
-        
+
         // Bases de datos (detectables desde el frontend)
         if (html.includes('mongodb') || scripts.some(s => s.src?.includes('mongodb'))) technologies.add('MongoDB');
         if (html.includes('firebase') || html.includes('google-analytics')) technologies.add('Firebase');
         if (html.includes('supabase') || html.includes('supabase')) technologies.add('Supabase');
-        
+
         // Bibliotecas de CSS
         if (html.includes('animate.css') || html.includes('aos') || links.some(l => l.getAttribute('href')?.includes('animate'))) technologies.add('Animate.css');
         if (html.includes('swiper') || html.includes('slick')) technologies.add('Slider/Carousel');
         if (html.includes('chart.js') || scripts.some(s => s.src?.includes('chart'))) technologies.add('Chart.js');
         if (html.includes('d3') || scripts.some(s => s.src?.includes('d3'))) technologies.add('D3.js');
-        
+
         // Herramientas de análisis y marketing
         if (html.includes('google-analytics') || html.includes('gtag')) technologies.add('Google Analytics');
         if (html.includes('facebook') || html.includes('fb-')) technologies.add('Facebook Pixel');
@@ -2007,15 +1857,15 @@ const App = () => {
         if (html.includes('mailchimp') || html.includes('mc-')) technologies.add('Mailchimp');
         if (html.includes('stripe') || html.includes('stripe')) technologies.add('Stripe');
         if (html.includes('paypal') || html.includes('paypal')) technologies.add('PayPal');
-        
+
         // Herramientas de desarrollo y build
         if (html.includes('types') || scripts.some(s => s.src?.includes('types'))) technologies.add('TypeScript');
         if (html.includes('sass') || html.includes('scss') || links.some(l => l.getAttribute('href')?.includes('sass') || l.getAttribute('href')?.includes('scss'))) technologies.add('SASS/SCSS');
         if (html.includes('less') || links.some(l => l.getAttribute('href')?.includes('less'))) technologies.add('LESS');
         if (html.includes('postcss') || links.some(l => l.getAttribute('href')?.includes('postcss'))) technologies.add('PostCSS');
-        
+
         const currentVersions = getCurrentVersions();
-        
+
         return Array.from(technologies)
             .sort()
             .map(techName => ({
@@ -2029,7 +1879,7 @@ const App = () => {
         const products: EcommerceData['products'] = [];
         const paymentMethods: string[] = [];
         const htmlLower = html.toLowerCase();
-        
+
         const productSelectors = [
             '.product', '.item', '.product-item', '.product-card', '.product-tile',
             '.woocommerce-product', '.shopify-product', '.magento-product',
@@ -2037,10 +1887,10 @@ const App = () => {
             'article', '.card', '.listing', '.result',
             '.grid-item', '.list-item', '.catalog-item'
         ];
-        
+
         const pricePatterns = /\$\d+|€\d+|£\d+|¥\d+|₹\d+|\d+\.\d+\s*\$|\d+,\d+\s*€/g;
         const priceMatches = html.match(pricePatterns) || [];
-        
+
         productSelectors.forEach(selector => {
             doc.querySelectorAll(selector).forEach(productEl => {
                 const nameSelectors = [
@@ -2049,27 +1899,27 @@ const App = () => {
                     '[data-product-title]', '[data-name]',
                     '.item-title', '.card-title'
                 ];
-                
+
                 const priceSelectors = [
                     '.price', '.product-price', '.cost', '.amount',
                     '[data-price]', '.price-current', '.price-now',
                     '.sale-price', '.regular-price', '.final-price',
                     '.money', '.currency'
                 ];
-                
+
                 let nameEl = null;
                 let priceEl = null;
-                
+
                 for (const sel of nameSelectors) {
                     nameEl = productEl.querySelector(sel);
                     if (nameEl && nameEl.textContent?.trim()) break;
                 }
-                
+
                 for (const sel of priceSelectors) {
                     priceEl = productEl.querySelector(sel);
                     if (priceEl && priceEl.textContent?.trim()) break;
                 }
-                
+
                 if (!priceEl) {
                     const textContent = productEl.textContent || '';
                     const priceMatch = textContent.match(/\$\d+|€\d+|£\d+|¥\d+|₹\d+/);
@@ -2077,14 +1927,14 @@ const App = () => {
                         priceEl = { textContent: priceMatch[0] } as Element;
                     }
                 }
-                
+
                 if (nameEl || priceEl) {
                     const priceText = priceEl?.textContent?.trim() || null;
                     const currency = priceText?.match(/[$€£¥₹]/)?.[0] || null;
-                    
+
                     const ratingEl = productEl.querySelector('.rating, .stars, [data-rating], .review-stars, .star-rating');
                     const reviewEl = productEl.querySelector('.reviews, .review-count, [data-reviews], .review-total');
-                    
+
                     products.push({
                         name: nameEl?.textContent?.trim() || 'Producto detectado',
                         price: priceText,
@@ -2096,7 +1946,7 @@ const App = () => {
                 }
             });
         });
-        
+
         if (products.length === 0 && priceMatches.length > 0) {
             priceMatches.slice(0, 5).forEach((price, i) => {
                 products.push({
@@ -2109,7 +1959,7 @@ const App = () => {
                 });
             });
         }
-        
+
         const paymentKeywords = {
             'PayPal': ['paypal', 'pp-logo', 'paypal-button'],
             'Stripe': ['stripe', 'stripe-button', 'stripe-checkout'],
@@ -2121,23 +1971,23 @@ const App = () => {
             'Bitcoin': ['bitcoin', 'btc', 'crypto'],
             'Mercado Pago': ['mercadopago', 'mercado-pago', 'mp-payment']
         };
-        
+
         Object.entries(paymentKeywords).forEach(([method, keywords]) => {
-            if (keywords.some(keyword => 
-                htmlLower.includes(keyword) || 
+            if (keywords.some(keyword =>
+                htmlLower.includes(keyword) ||
                 doc.querySelector(`[class*="${keyword}"], [id*="${keyword}"], [alt*="${keyword}"]`)
             )) {
                 paymentMethods.push(method);
             }
         });
-        
+
         const jsonLdScripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
         const structuredData = {
             hasProductSchema: false,
             hasOrganizationSchema: false,
             hasReviewSchema: false
         };
-        
+
         jsonLdScripts.forEach(script => {
             try {
                 const data = JSON.parse(script.textContent || '');
@@ -2149,7 +1999,7 @@ const App = () => {
                         if (type.includes('Review')) structuredData.hasReviewSchema = true;
                     }
                 };
-                
+
                 if (Array.isArray(data)) {
                     data.forEach(checkSchema);
                 } else {
@@ -2159,7 +2009,7 @@ const App = () => {
                 // Ignorar errores de parsing JSON
             }
         });
-        
+
         const cartPatterns = [
             '.cart', '#cart', '.shopping-cart', '.basket', '.bag',
             '.cart-icon', '.cart-button', '.add-to-cart', '.buy-now',
@@ -2167,52 +2017,52 @@ const App = () => {
             'add to cart', 'añadir al carrito', 'agregar al carrito',
             'comprar ahora', 'buy now', 'add to bag', 'añadir a la bolsa'
         ];
-        
+
         const wishlistPatterns = [
             '.wishlist', '.favorites', '.favourite', '.wish-list',
             '[data-wishlist]', '.save-for-later', '.add-to-wishlist',
             'wishlist', 'lista de deseos', 'favoritos', 'guardar para después'
         ];
-        
+
         const searchPatterns = [
             'input[type="search"]', '.search-box', '#search', '.search-input',
             '.search-form', '[placeholder*="search"]', '[placeholder*="buscar"]',
             'buscar producto', 'search products', 'find products'
         ];
-        
+
         const filterPatterns = [
             '.filter', '.filters', '[data-filter]', '.facet', '.facets',
             '.sort', '.sorting', '.category-filter', '.price-filter',
             'filtrar', 'filter', 'ordenar', 'sort by'
         ];
-        
-        const hasCart = cartPatterns.some(pattern => 
+
+        const hasCart = cartPatterns.some(pattern =>
             pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
-            doc.querySelector(pattern) : htmlLower.includes(pattern)
+                doc.querySelector(pattern) : htmlLower.includes(pattern)
         );
-        
-        const hasWishlist = wishlistPatterns.some(pattern => 
+
+        const hasWishlist = wishlistPatterns.some(pattern =>
             pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
-            doc.querySelector(pattern) : htmlLower.includes(pattern)
+                doc.querySelector(pattern) : htmlLower.includes(pattern)
         );
-        
-        const hasSearch = searchPatterns.some(pattern => 
+
+        const hasSearch = searchPatterns.some(pattern =>
             pattern.startsWith('input') || pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
-            doc.querySelector(pattern) : htmlLower.includes(pattern)
+                doc.querySelector(pattern) : htmlLower.includes(pattern)
         );
-        
-        const hasFilters = filterPatterns.some(pattern => 
+
+        const hasFilters = filterPatterns.some(pattern =>
             pattern.startsWith('.') || pattern.startsWith('#') || pattern.startsWith('[') ?
-            doc.querySelector(pattern) : htmlLower.includes(pattern)
+                doc.querySelector(pattern) : htmlLower.includes(pattern)
         );
-        
+
         const shoppingFeatures = {
             hasCart,
             hasWishlist,
             hasSearch,
             hasFilters
         };
-        
+
         return {
             products,
             structuredData,
@@ -2226,7 +2076,7 @@ const App = () => {
     const handleScrape = async () => {
         // Validación y sanitización de entrada
         const securityAnalysis = performSecurityAnalysis(url);
-        
+
         if (securityAnalysis.riskLevel === 'critical' || securityAnalysis.riskLevel === 'high') {
             setError(`Entrada no segura detectada: ${securityAnalysis.issues.join(', ')}`);
             return;
@@ -2262,7 +2112,7 @@ const App = () => {
             // PASO 1: Validar políticas de scraping solo si modo ético está activado
             let robotsAllowed = true;
             let termsAnalysis = { allowed: true, checked: false };
-            
+
             if (ethicalMode) {
                 logger.info('Verificando políticas de scraping (modo ético activado)');
                 [robotsAllowed, termsAnalysis] = await Promise.all([
@@ -2286,10 +2136,10 @@ const App = () => {
 
             // Si el scraping está prohibido Y el modo ético está activado, mostrar mensaje y salir
             if (scrapingPolicy.scrapingProhibited && ethicalMode) {
-                const prohibitionMessage = !robotsAllowed 
+                const prohibitionMessage = !robotsAllowed
                     ? '❌ Scraping prohibido: El sitio web no permite el acceso automatizado según su archivo robots.txt.'
                     : '❌ Scraping restringido: Los términos de servicio del sitio web prohíben el scraping automatizado.';
-                
+
                 setError(prohibitionMessage);
                 setLoading(false);
                 return;
@@ -2300,24 +2150,24 @@ const App = () => {
             // PASO 2: Realizar scraping de la página principal
             const response = await fetch(`${CORS_PROXY}${encodeURIComponent(url)}`);
             if (!response.ok) throw new Error(`Error al obtener la URL. Estado: ${response.status}`);
-            
+
             const html = await response.text();
             const doc = new DOMParser().parseFromString(html, 'text/html');
             const title = doc.querySelector('title')?.textContent || 'Sin título';
 
             // Extraer enlaces de la página principal
-            const links = Array.from(doc.querySelectorAll('a[href]')).map(a => ({ 
-                text: a.textContent?.trim() || '', 
-                href: a.getAttribute('href') 
+            const links = Array.from(doc.querySelectorAll('a[href]')).map(a => ({
+                text: a.textContent?.trim() || '',
+                href: a.getAttribute('href')
             }));
-            
+
             // Extraer subdominios únicos
             const subdomains = extractSubdomains(links, url);
-            
+
             // Hacer scraping de subdominios (máximo 5 para optimizar rendimiento)
             const subdomainResults: SubdomainData[] = [];
             const maxSubdomains = Math.min(subdomains.length, 5); // Reducido de 10 a 5
-            
+
             // Procesar subdominios con Promise.allSettled para mejor rendimiento
             const subdomainPromises = subdomains.slice(0, maxSubdomains).map(async (subdomainUrl) => {
                 try {
@@ -2335,7 +2185,7 @@ const App = () => {
                     };
                 }
             });
-            
+
             const settledResults = await Promise.allSettled(subdomainPromises);
             settledResults.forEach((result) => {
                 if (result.status === 'fulfilled') {
@@ -2360,13 +2210,13 @@ const App = () => {
 
             // PASO 4: Análisis de tecnologías
             const technologies = detectTechnologies(html, doc);
-            
+
             // PASO 5: Análisis de ciberseguridad
             const headers = response.headers;
             const securityHeaders = analyzeSecurityHeaders(headers);
             const sslAnalysis = analyzeSSL(url, response);
             const vulnerableTechnologies = detectVulnerableTechnologies(technologies, html);
-            
+
             // Contar enlaces externos (pertenecen a otros dominios)
             const baseDomain = extractBaseDomain(url);
             const externalLinks = links.filter(link => {
@@ -2380,7 +2230,7 @@ const App = () => {
             }).length;
 
             // Contar imágenes sin texto alternativo
-            const imagesWithoutAlt = Array.from(doc.querySelectorAll('img')).filter(img => 
+            const imagesWithoutAlt = Array.from(doc.querySelectorAll('img')).filter(img =>
                 !img.getAttribute('alt') || img.getAttribute('alt')?.trim() === ''
             ).length;
 
@@ -2410,9 +2260,9 @@ const App = () => {
                     h3: Array.from(doc.querySelectorAll('h3')).map(h => h.textContent?.trim()),
                 },
                 links,
-                images: Array.from(doc.querySelectorAll('img')).map(img => ({ 
-                    src: img.getAttribute('src'), 
-                    alt: img.getAttribute('alt') 
+                images: Array.from(doc.querySelectorAll('img')).map(img => ({
+                    src: img.getAttribute('src'),
+                    alt: img.getAttribute('alt')
                 })),
                 technologies,
                 ecommerce: analyzeEcommerce(html, doc),
@@ -2427,15 +2277,15 @@ const App = () => {
             scrapedData.securityAnalysis.privacyScore = calculatePrivacyScore(scrapedData);
 
             setCurrentResult(scrapedData);
-            
+
             // Crear consulta optimizada con títulos generados dinámicamente y keywords sin tecnologías
             const urlKeywords = extractUrlKeywords(url, html, scrapedData);
             const validatedKeywords = await validateKeywordsWithWebSearch(urlKeywords, url);
             const { optimizedTitle, matchPercentage } = generateOptimizedTitle(validatedKeywords, title, url);
-            
+
             // Usar función mejorada para extraer keywords sin tecnologías para el historial
             const cleanKeywords = extractKeywordsWithoutTech(html, scrapedData);
-            
+
             const optimizedQuery: OptimizedQuery = {
                 title: optimizedTitle,
                 url,
@@ -2444,10 +2294,10 @@ const App = () => {
                 matchPercentage: matchPercentage,
                 timestamp: Date.now()
             };
-            
+
             // Guardar consulta completa en localStorage para análisis detallado
             const fullQuery: Query = { title, url, data: scrapedData, timestamp: Date.now() };
-            
+
             // Actualizar estado y localStorage de manera optimizada
             setCurrentResult(scrapedData);
             setQueries(prevQueries => {
@@ -2459,7 +2309,7 @@ const App = () => {
                 }
                 return newQueries;
             });
-            
+
             // Guardar consulta optimizada
             setOptimizedQueries(prevOptimizedQueries => {
                 const newOptimizedQueries = [optimizedQuery, ...prevOptimizedQueries.filter(q => q.url !== url)].slice(0, 10);
@@ -2471,7 +2321,7 @@ const App = () => {
                 return newOptimizedQueries;
             });
 
-            logger.info('Scraping completado con Scanner de Seguridad Realista V3.0 - Análisis inteligente aplicado');
+            logger.info('Scraping completado');
 
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Ocurrió un error.');
@@ -2479,7 +2329,7 @@ const App = () => {
             setLoading(false);
         }
     };
-    
+
     // --- MANEJADORES DE EVENTOS ---
     const handleHistoryClick = (query: Query) => {
         setUrl(query.url);
@@ -2533,17 +2383,17 @@ const App = () => {
     // --- FUNCIONES DE RENDERIZADO ESPECIALIZADAS ---
     const renderHighlightedRobotsTxt = (content: string): React.ReactElement => {
         const lines = content.split('\n');
-        
+
         return (
             <>
                 {lines.map((line, index) => {
                     const isRelevant = /disallow|user-agent|allow|^\s*$/.test(line.toLowerCase());
                     const isDisallow = /disallow\s*:\s*\//.test(line.toLowerCase());
                     const isUserAgent = line.toLowerCase().includes('user-agent:');
-                    
+
                     return (
-                        <div 
-                            key={index} 
+                        <div
+                            key={index}
                             className={`robots-line ${isDisallow ? 'disallow-line' : ''} ${isUserAgent ? 'user-agent-line' : ''} ${isRelevant ? 'relevant-line' : ''}`}
                         >
                             {line}
@@ -2558,7 +2408,7 @@ const App = () => {
     const renderSummary = (data: ScrapedData) => (
         <div className="cybersecurity-summary">
             <div className="security-overview">
-                <h3>🔒 Resumen de Ciberseguridad <span className="system-version-badge">V3.0 Realista</span></h3>
+                <h3>🔒 Resumen de Ciberseguridad </h3>
                 <div className="security-metrics">
                     <div className="security-metric">
                         <span className="metric-label">Tecnologías detectadas:    </span>
@@ -2578,40 +2428,32 @@ const App = () => {
                             {data.securityAnalysis.privacyScore}% ({getScoreGrade(data.securityAnalysis.privacyScore)})
                         </span>
                     </div>
-                    <div className="privacy-score-details">
-                        <small className="privacy-explanation">
-                            <span className="scoring-version">✨ Sistema V3.0: Sin whitelists, con baseline profesional y análisis contextual</span>
-                            {data.securityAnalysis.vulnerableTechnologies.length > 0 && (
-                                <span> | Vulnerabilidades reales detectadas: {data.securityAnalysis.vulnerableTechnologies.length}</span>
-                            )}
-                        </small>
-                    </div>
                 </div>
             </div>
-            
+
             <div className="scraping-policy">
                 <h3>📜 Política de Scraping</h3>
                 <div className={`policy-status ${ethicalMode && data.scrapingPolicy.scrapingProhibited ? 'prohibited' : 'allowed'}`}>
                     <div className="policy-details">
                         <span className="policy-text">
-                            {ethicalMode && data.scrapingPolicy.scrapingProhibited ? 
-                                '❌ Scraping prohibido por políticas del sitio' : 
+                            {ethicalMode && data.scrapingPolicy.scrapingProhibited ?
+                                '❌ Scraping prohibido por políticas del sitio' :
                                 '✅ Scraping permitido'
                             }
                         </span>
                         <div className="policy-checks">
                             <div className={`check ${ethicalMode && data.scrapingPolicy.robotsTxtAllowed ? 'pass' : ethicalMode && !data.scrapingPolicy.robotsTxtAllowed ? 'fail' : 'warning'}`}>
                                 📄 robots.txt {
-                                    ethicalMode ? 
-                                    (data.scrapingPolicy.robotsTxtAllowed ? '✓' : '✗') : 
-                                    '⚠️'
+                                    ethicalMode ?
+                                        (data.scrapingPolicy.robotsTxtAllowed ? '✓' : '✗') :
+                                        '⚠️'
                                 }
                             </div>
                             <div className={`check ${ethicalMode && !data.scrapingPolicy.termsOfServiceRestricted ? 'pass' : ethicalMode && data.scrapingPolicy.termsOfServiceRestricted ? 'fail' : 'warning'}`}>
                                 📋 Términos {
-                                    ethicalMode ? 
-                                    (data.scrapingPolicy.termsOfServiceRestricted ? '✗' : '✓') : 
-                                    '⚠️'
+                                    ethicalMode ?
+                                        (data.scrapingPolicy.termsOfServiceRestricted ? '✗' : '✓') :
+                                        '⚠️'
                                 }
                             </div>
                         </div>
@@ -2652,7 +2494,7 @@ const App = () => {
                         </div>
                     </li>
                 </ul>
-                
+
                 <div className="robots-txt-section">
                     <h4>📄 Contenido del robots.txt</h4>
                     <div className="robots-txt-content">
@@ -2668,7 +2510,7 @@ const App = () => {
     const renderSecurity = (data: ScrapedData) => {
         const { securityAnalysis } = data;
         const { detailed } = securityAnalysis.securityHeaders;
-        
+
         return (
             <div className="security-analysis">
                 {/* SECCIÓN 1: VULNERABILIDADES DETECTADAS - PRIORIDAD MÁXIMA */}
@@ -2680,7 +2522,7 @@ const App = () => {
                             {['critical', 'high', 'medium', 'low'].map(severity => {
                                 const vulnerabilitiesOfSeverity = securityAnalysis.vulnerableTechnologies.filter(vuln => vuln.severity === severity);
                                 if (vulnerabilitiesOfSeverity.length === 0) return null;
-                                
+
                                 return (
                                     <div key={severity} className={`severity-group ${severity}-group`}>
                                         <h4 className={`severity-header ${severity}`}>
@@ -2722,7 +2564,7 @@ const App = () => {
                                     </div>
                                 );
                             })}
-                            
+
                         </div>
                     ) : (
                         <div className="no-vulnerabilities-container">
@@ -2741,6 +2583,9 @@ const App = () => {
                             <span className="audit-icon">{securityAnalysis.securityHeaders.csp ? '✓' : '❌'}</span>
                             <div className="audit-details">
                                 <span>Content Security Policy (CSP)</span>
+                                <p className="header-explanation">
+                                    Define qué recursos (scripts, imágenes, estilos) pueden cargarse. Previene ataques XSS y de inyección de datos.
+                                </p>
                                 {detailed?.csp && (
                                     <small className="audit-info">
                                         {detailed.csp.valid ? '✅ Válida' : '⚠️ Incompleta'}: {detailed.csp.content}
@@ -2752,9 +2597,12 @@ const App = () => {
                             <span className="audit-icon">{securityAnalysis.securityHeaders.hsts ? '✓' : '❌'}</span>
                             <div className="audit-details">
                                 <span>HTTP Strict Transport Security (HSTS)</span>
+                                <p className="header-explanation">
+                                    Fuerza a los navegadores a usar HTTPS. Protege contra ataques de "Man-in-the-Middle" y secuestro de cookies.
+                                </p>
                                 {detailed?.hsts && (
                                     <small className="audit-info">
-                                        {detailed.hsts.valid ? '✅ Válida' : '⚠️ Inválida'}: 
+                                        {detailed.hsts.valid ? '✅ Válida' : '⚠️ Inválida'}:
                                         {detailed.hsts.maxAge >= 31536000 ? '✅ 1+ año' : '⚠️ < 1 año'} ({detailed.hsts.content})
                                     </small>
                                 )}
@@ -2764,6 +2612,9 @@ const App = () => {
                             <span className="audit-icon">{securityAnalysis.securityHeaders.xss ? '✓' : '⚠️'}</span>
                             <div className="audit-details">
                                 <span>Protección XSS</span>
+                                <p className="header-explanation">
+                                    Header legacy para navegadores antiguos. Activa filtros XSS integrados en el navegador.
+                                </p>
                                 {detailed?.xssProtection && (
                                     <small className="audit-info">
                                         {detailed.xssProtection.valid ? '✅ Configurada' : '⚠️ Mínima'}: {detailed.xssProtection.content}
@@ -2773,12 +2624,20 @@ const App = () => {
                         </li>
                         <li className={`audit-item ${securityAnalysis.securityHeaders.contentType ? 'audit-pass' : 'audit-warn'}`}>
                             <span className="audit-icon">{securityAnalysis.securityHeaders.contentType ? '✓' : '⚠️'}</span>
-                            <span>X-Content-Type-Options</span>
+                            <div className="audit-details">
+                                <span>X-Content-Type-Options</span>
+                                <p className="header-explanation">
+                                    Evita que el navegador "adivine" el tipo de archivo (MIME-sniffing). Previene ejecución de archivos maliciosos disfrazados.
+                                </p>
+                            </div>
                         </li>
                         <li className={`audit-item ${detailed?.referrerPolicy.valid ? 'audit-pass' : 'audit-warn'}`}>
                             <span className="audit-icon">{detailed?.referrerPolicy.valid ? '✓' : '⚠️'}</span>
                             <div className="audit-details">
                                 <span>Referrer Policy</span>
+                                <p className="header-explanation">
+                                    Controla qué información de referencia se envía al navegar a otros sitios. Protege la privacidad del usuario.
+                                </p>
                                 <small className="audit-info">{detailed?.referrerPolicy.content}</small>
                             </div>
                         </li>
@@ -2786,6 +2645,9 @@ const App = () => {
                             <span className="audit-icon">{detailed?.frameOptions.valid ? '✓' : '⚠️'}</span>
                             <div className="audit-details">
                                 <span>X-Frame-Options</span>
+                                <p className="header-explanation">
+                                    Previene ataques de "Clickjacking" controlando si el sitio puede ser embebido en iframes.
+                                </p>
                                 <small className="audit-info">{detailed?.frameOptions.content}</small>
                             </div>
                         </li>
@@ -2793,9 +2655,12 @@ const App = () => {
                             <span className="audit-icon">{detailed?.infoDisclosure.serverExposed ? '⚠️' : '✓'}</span>
                             <div className="audit-details">
                                 <span>Exposición de Información del Servidor</span>
+                                <p className="header-explanation">
+                                    Revelar la versión del servidor (ej. Apache/2.4) facilita ataques dirigidos a vulnerabilidades conocidas.
+                                </p>
                                 <small className="audit-info">
-                                    {detailed?.infoDisclosure.serverExposed ? 
-                                        '❌ El servidor expone información de versión' : 
+                                    {detailed?.infoDisclosure.serverExposed ?
+                                        '❌ El servidor expone información de versión' :
                                         '✅ Información del servidor oculta'
                                     }
                                 </small>
@@ -2805,9 +2670,12 @@ const App = () => {
                             <span className="audit-icon">{detailed?.infoDisclosure.poweredByExposed ? '⚠️' : '✓'}</span>
                             <div className="audit-details">
                                 <span>Exposición de Framework (X-Powered-By)</span>
+                                <p className="header-explanation">
+                                    Indica qué tecnología usa el sitio (ej. Express, PHP). Facilita la búsqueda de exploits específicos.
+                                </p>
                                 <small className="audit-info">
-                                    {detailed?.infoDisclosure.poweredByExposed ? 
-                                        '⚠️ El framework expone información' : 
+                                    {detailed?.infoDisclosure.poweredByExposed ?
+                                        '⚠️ El framework expone información' :
                                         '✅ Framework no expuesto'
                                     }
                                 </small>
@@ -2826,8 +2694,8 @@ const App = () => {
                                 <span>HTTPS habilitado</span>
                                 {securityAnalysis.sslAnalysis.additionalInfo && (
                                     <small className="audit-info">
-                                        {securityAnalysis.sslAnalysis.additionalInfo.mixedContent ? 
-                                            '⚠️ Contenido mixto detectado' : 
+                                        {securityAnalysis.sslAnalysis.additionalInfo.mixedContent ?
+                                            '⚠️ Contenido mixto detectado' :
                                             '✅ Conexión segura'
                                         }
                                     </small>
@@ -2840,11 +2708,11 @@ const App = () => {
                                 <span>Certificado SSL</span>
                                 {securityAnalysis.sslAnalysis.additionalInfo?.certificateValidity && (
                                     <small className="audit-info">
-                                        {securityAnalysis.sslAnalysis.additionalInfo.certificateValidity.daysRemaining! > 90 ? 
-                                            '✅ Válido' : 
+                                        {securityAnalysis.sslAnalysis.additionalInfo.certificateValidity.daysRemaining! > 90 ?
+                                            '✅ Válido' :
                                             securityAnalysis.sslAnalysis.additionalInfo.certificateValidity.daysRemaining! > 30 ?
-                                            '⚠️ Próximo a expirar' : 
-                                            '❌ Por expirar'
+                                                '⚠️ Próximo a expirar' :
+                                                '❌ Por expirar'
                                         } ({securityAnalysis.sslAnalysis.additionalInfo.certificateValidity.daysRemaining} días restantes)
                                     </small>
                                 )}
@@ -2855,7 +2723,7 @@ const App = () => {
                             <div className="audit-details">
                                 <span>Protocolo TLS</span>
                                 <small className="audit-info">
-                                    {securityAnalysis.sslAnalysis.tlsVersion} - 
+                                    {securityAnalysis.sslAnalysis.tlsVersion} -
                                     {securityAnalysis.sslAnalysis.additionalInfo?.protocolVersion || 'Versión estándar'}
                                 </small>
                             </div>
@@ -2888,7 +2756,7 @@ const App = () => {
 
     const getErrorExplanation = (error: string): string => {
         const errorLower = error.toLowerCase();
-        
+
         if (errorLower.includes('404')) {
             return 'Error 404 - Recurso no encontrado. La URL no existe o ha sido movida.';
         }
@@ -2942,7 +2810,7 @@ const App = () => {
                 return httpCodes[code] || `Error HTTP ${code} - Código de estado HTTP no estándar`;
             }
         }
-        
+
         return `Error no identificado: ${error}`;
     };
 
@@ -2956,8 +2824,8 @@ const App = () => {
                         <h3>🌐 Subdominios Encontrados</h3>
                         <div className="subdomains-compact">
                             {successSubdomains.map((subdomain, i) => (
-                                <div 
-                                    key={`success-${i}`} 
+                                <div
+                                    key={`success-${i}`}
                                     className="subdomain-compact-item success"
                                 >
                                     <span className="subdomain-title">{subdomain.url}</span>
@@ -2967,7 +2835,7 @@ const App = () => {
                         </div>
                     </div>
                 )}
-                
+
                 {successSubdomains.length === 0 && (
                     <div className="placeholder">No se encontraron subdominios accesibles.</div>
                 )}
@@ -2987,18 +2855,18 @@ const App = () => {
 
     const compareVersions = (version: string, currentVersion: string): 'outdated' | 'current' | 'newer' => {
         if (!version || !currentVersion) return 'current';
-        
+
         const versionParts = version.split('.').map(Number);
         const currentParts = currentVersion.split('.').map(Number);
-        
+
         for (let i = 0; i < Math.max(versionParts.length, currentParts.length); i++) {
             const v = versionParts[i] || 0;
             const c = currentParts[i] || 0;
-            
+
             if (v < c) return 'outdated';
             if (v > c) return 'newer';
         }
-        
+
         return 'current';
     };
 
@@ -3007,7 +2875,7 @@ const App = () => {
             {data.technologies.length > 0 ? data.technologies.map((tech, i) => {
                 const versionStatus = tech.version && tech.currentVersion ? compareVersions(tech.version, tech.currentVersion) : 'current';
                 const isVulnerable = data.securityAnalysis.vulnerableTechnologies.some(vuln => vuln.name === tech.name);
-                
+
                 return (
                     <div key={i} className={`tech-item-with-version ${versionStatus} ${isVulnerable ? 'vulnerable' : ''}`}>
                         <span className="tech-name">{tech.name}</span>
@@ -3131,10 +2999,10 @@ const App = () => {
     };
 
     const renderTabContent = () => {
-        if (loading) return <div className="loading">🔍 Analizando con Scanner de Seguridad Realista V3.0 - Políticas de scraping y análisis inteligente...</div>;
+        if (loading) return <div className="loading">🔍 Analizando políticas de scraping...</div>;
         if (error) return <div className="error">{getErrorExplanation(error)}</div>;
         if (!currentResult) return <div className="placeholder">Los resultados del scraping ético se mostrarán aquí.</div>;
-        
+
         switch (activeTab) {
             case 'summary': return renderSummary(currentResult);
             case 'security': return renderSecurity(currentResult);
@@ -3163,21 +3031,21 @@ const App = () => {
                             className="github-link"
                             title="Scrapii en GitHub"
                         >
-                        🦊
+                            🦊
                         </a>
                     </h1>
                     <p className="app-subtitle">Scraping responsable con análisis de ciberseguridad</p>
                 </div>
                 <header className="header">
                     <label htmlFor="url-input">Ingrese la URL </label>
-                    <input 
-                        id="url-input" 
-                        type="url" 
-                        value={url} 
-                        onChange={e => setUrl(e.target.value)} 
-                        onKeyDown={e => e.key === 'Enter' && handleScrape()} 
-                        placeholder="https://ejemplo.com" 
-                        aria-label="URL a extraer" 
+                    <input
+                        id="url-input"
+                        type="url"
+                        value={url}
+                        onChange={e => setUrl(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleScrape()}
+                        placeholder="https://ejemplo.com"
+                        aria-label="URL a extraer"
                     />
                     <button onClick={handleScrape} disabled={loading}>
                         {loading ? '🔍 Analizando...' : '🦊 Scraping'}
@@ -3189,9 +3057,9 @@ const App = () => {
                         <ul aria-label="Historial de consultas">
                             {sidebarItems.map((query, i) => (
                                 <li key={query ? query.timestamp : `empty-${i}`}>
-                                    <button 
-                                        onClick={() => query && handleOptimizedHistoryClick(query)} 
-                                        disabled={!query} 
+                                    <button
+                                        onClick={() => query && handleOptimizedHistoryClick(query)}
+                                        disabled={!query}
                                         title={query ? `${query.title} (${query.url}) | Security: ${query.securityScore}%` : 'Vacío'}
                                         className="history-button"
                                     >
@@ -3212,7 +3080,7 @@ const App = () => {
                         <div className="sidebar-actions">
                             <button onClick={handleExport} disabled={!currentResult || loading}>📄 Exportar JSON</button>
                             <button onClick={handleClearHistory} disabled={queries.length === 0}>🗑️ Limpiar Historial</button>
-                            <button 
+                            <button
                                 onClick={handleToggleEthicalMode}
                                 className={ethicalMode ? 'ethical-mode-active' : 'ethical-mode-inactive'}
                                 title={ethicalMode ? 'Desactivar modo ético para ignorar restricciones' : 'Activar modo ético para respetar restricciones'}
@@ -3232,7 +3100,7 @@ const App = () => {
                             <button className={`tab-button ${activeTab === 'json' ? 'active' : ''}`} onClick={() => setActiveTab('json')}>📋 JSON</button>
                         </div>
                         <div className="tab-content">
-                           {renderTabContent()}
+                            {renderTabContent()}
                         </div>
                     </section>
                 </main>
@@ -3246,5 +3114,4 @@ const App = () => {
     );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-root.render(<React.StrictMode><App /></React.StrictMode>);
+export default App;
